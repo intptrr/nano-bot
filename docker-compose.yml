@@ -1,0 +1,15 @@
+services:
+  nano-bot:
+    build: .
+    image: nano-bot:latest
+    container_name: nano-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Long-polling bot needs outbound network only; no ports to expose.
+    # Optional: pin a log driver size so the container can't fill the host disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

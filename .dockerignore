@@ -1,0 +1,25 @@
+# Version control / local env
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Caches / build artefacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+.python-version
+
+# Tooling configs not needed at runtime
+.pre-commit-config.yaml
+README.md

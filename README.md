@@ -54,6 +54,23 @@ uv run nano-bot
 uv run python -m nano_bot
 ```
 
+## Deploy with Docker
+
+A multi-stage `Dockerfile` builds a slim runtime image; `docker-compose.yml` wires it up with `.env` and persistent restart.
+
+```bash
+# Build the image and start in the background.
+docker compose up -d --build
+
+# Tail the logs.
+docker compose logs -f
+
+# Stop and remove the container.
+docker compose down
+```
+
+The container runs as a non-root user, reads secrets from `.env` (never baked into the image), and reconnects automatically on failure (`restart: unless-stopped`). No ports are exposed — the bot uses Telegram long polling for outbound-only connectivity.
+
 ## Commands
 
 - `/start` — greet and show chat id
