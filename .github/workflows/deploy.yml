@@ -68,7 +68,7 @@ jobs:
             set -e
             cd ~/apps/nano-bot
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            docker pull "$IMAGE:latest"
+            docker pull "${IMAGE}:latest"
             docker rm -f nano-bot 2>/dev/null || true
             docker run -d \
               --name nano-bot \
@@ -77,7 +77,7 @@ jobs:
               --log-driver json-file \
               --log-opt max-size=10m \
               --log-opt max-file=3 \
-              "$IMAGE:latest"
+              "${IMAGE}:latest"
             docker image prune -f
             docker logout ghcr.io
         env:
