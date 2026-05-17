@@ -1,0 +1,82 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Sync .env to VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          envs: ENV_FILE
+          script: |
+            set -e
+            mkdir -p ~/apps/nano-bot
+            umask 077
+            cat > ~/apps/nano-bot/.env <<'EOF'
+            ${ENV_FILE}
+            EOF
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+
+      - name: Deploy container
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          envs: IMAGE
+          script: |
+            set -e
+            cd ~/apps/nano-bot
+            docker pull "$IMAGE:latest"
+            docker rm -f nano-bot 2>/dev/null || true
+            docker run -d \
+              --name nano-bot \
+              --restart unless-stopped \
+              --env-file .env \
+              --log-driver json-file \
+              --log-opt max-size=10m \
+              --log-opt max-file=3 \
+              "$IMAGE:latest"
+            docker image prune -f
+        env:
+          IMAGE: ${{ env.IMAGE }}
