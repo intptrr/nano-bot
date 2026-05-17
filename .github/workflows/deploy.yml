@@ -51,9 +51,7 @@ jobs:
             set -e
             mkdir -p ~/apps/nano-bot
             umask 077
-            cat > ~/apps/nano-bot/.env <<'EOF'
-            ${ENV_FILE}
-            EOF
+            printf '%s' "$ENV_FILE" > ~/apps/nano-bot/.env
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
 
