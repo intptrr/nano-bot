@@ -63,10 +63,11 @@ jobs:
           host: ${{ secrets.AZURE_VM_HOST }}
           username: ${{ secrets.AZURE_VM_USER }}
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
-          envs: IMAGE
+          envs: IMAGE,GHCR_USER,GHCR_TOKEN
           script: |
             set -e
             cd ~/apps/nano-bot
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker pull "$IMAGE:latest"
             docker rm -f nano-bot 2>/dev/null || true
             docker run -d \
@@ -78,5 +79,8 @@ jobs:
               --log-opt max-file=3 \
               "$IMAGE:latest"
             docker image prune -f
+            docker logout ghcr.io
         env:
           IMAGE: ${{ env.IMAGE }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
