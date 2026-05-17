@@ -71,6 +71,41 @@ docker compose down
 
 The container runs as a non-root user, reads secrets from `.env` (never baked into the image), and reconnects automatically on failure (`restart: unless-stopped`). No ports are exposed — the bot uses Telegram long polling for outbound-only connectivity.
 
+## Continuous deployment (Azure VM)
+
+`.github/workflows/deploy.yml` builds a Docker image on every push to `main`, pushes it to GitHub Container Registry (GHCR), then SSHes into an Azure VM to sync the `.env` file and restart the container.
+
+### One-time VM setup
+
+```bash
+# Install Docker.
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER   # log out/in after
+```
+
+The workflow creates `~/apps/nano-bot/` automatically. Outbound 443 is the only network requirement (Telegram long polling).
+
+### GitHub configuration
+
+Create a `prod` environment (Settings → Environments → New environment) and add the following **environment secrets**:
+
+| Secret | Value |
+|---|---|
+| `AZURE_VM_HOST` | VM public IP or DNS |
+| `AZURE_VM_USER` | SSH user (e.g. `azureuser`) |
+| `AZURE_VM_SSH_KEY` | Private SSH key authorized on the VM |
+| `ENV_FILE` | Full contents of the production `.env` |
+
+`GITHUB_TOKEN` is injected automatically and is used by the VM to pull the private GHCR image.
+
+### Flow
+
+1. Push to `main` → image built and pushed as `ghcr.io/<owner>/nano-bot:latest` (and `:<sha>`).
+2. Deploy job (gated on the `prod` environment) writes `~/apps/nano-bot/.env` from `ENV_FILE`.
+3. The VM logs in to GHCR with the workflow token, pulls the new image, and replaces the running container.
+
+To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workflow — no SSH session required.
+
 ## Commands
 
 - `/start` — greet and show chat id
