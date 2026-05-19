@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 
 import yfinance as yf
+
+from ._retry import retry_sync
+
+logger = logging.getLogger(__name__)
 
 CURRENCY_SYMBOLS: dict[str, str] = {
     "USD": "$",
@@ -63,11 +68,34 @@ def _pct_change_over(closes, bars_back: int) -> float | None:
     return (last - past) / past * 100
 
 
+class _EmptyHistoryError(Exception):
+    """Raised internally so empty yfinance responses trigger a retry."""
+
+
+def _fetch_history(symbol: str):
+    """Fetch yfinance history with retries on transient errors."""
+
+    def _attempt():
+        ticker = yf.Ticker(symbol)
+        # 3mo of daily bars: enough for daily, ~5-bar week, ~21-bar month windows.
+        hist = ticker.history(period="3mo", interval="1d", auto_adjust=False)
+        if hist.empty:
+            raise _EmptyHistoryError(f"no history returned for {symbol}")
+        return hist, ticker
+
+    try:
+        return retry_sync(
+            _attempt,
+            logger=logger,
+            description=f"yfinance history for {symbol}",
+        )
+    except _EmptyHistoryError:
+        return None, None
+
+
 def _fetch_one(symbol: str) -> Quote | None:
-    ticker = yf.Ticker(symbol)
-    # 3mo of daily bars: enough for daily, ~5-bar week, ~21-bar month windows.
-    hist = ticker.history(period="3mo", interval="1d", auto_adjust=False)
-    if hist.empty:
+    hist, ticker = _fetch_history(symbol)
+    if hist is None or ticker is None:
         return None
     closes = hist["Close"].dropna()
     if len(closes) < 2:

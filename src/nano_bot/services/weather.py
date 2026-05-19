@@ -1,12 +1,33 @@
 """Open-Meteo weather client. No API key required."""
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import date
 
 import aiohttp
 
+from ._retry import retry_async
+
 API_URL = "https://api.open-meteo.com/v1/forecast"
+
+logger = logging.getLogger(__name__)
+
+# Status codes worth retrying (transient upstream / rate-limit issues).
+_RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+
+
+class _TransientHTTPError(Exception):
+    """Raised internally to trigger a retry on a transient HTTP status."""
+
+
+_RETRY_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    aiohttp.ClientConnectionError,
+    aiohttp.ServerDisconnectedError,
+    asyncio.TimeoutError,
+    _TransientHTTPError,
+)
 
 # https://open-meteo.com/en/docs#weathervariables
 WMO_CODE: dict[int, str] = {
@@ -117,9 +138,20 @@ async def fetch_daily_forecast(
     }
     timeout = aiohttp.ClientTimeout(total=15)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(API_URL, params=params) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
+
+        async def _request() -> dict:
+            async with session.get(API_URL, params=params) as resp:
+                if resp.status in _RETRY_STATUSES:
+                    raise _TransientHTTPError(f"HTTP {resp.status} from Open-Meteo")
+                resp.raise_for_status()
+                return await resp.json()
+
+        data = await retry_async(
+            _request,
+            logger=logger,
+            description="Open-Meteo forecast",
+            retry_exceptions=_RETRY_EXCEPTIONS,
+        )
 
     daily = data["daily"]
     code = int(daily["weather_code"][0])
