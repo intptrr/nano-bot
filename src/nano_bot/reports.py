@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .config import Settings
 from .services.stocks import fetch_quotes, format_report
@@ -9,7 +11,10 @@ from .services.weather import fetch_daily_forecast
 
 log = logging.getLogger(__name__)
 
-MORNING_GREETING = "Good morning!"
+
+def _greeting(settings: Settings) -> str:
+    today = datetime.now(ZoneInfo(settings.timezone)).strftime("%A, %B %d")
+    return f"Good morning! Today is {today}."
 
 
 async def build_weather_section(settings: Settings) -> str:
@@ -31,7 +36,7 @@ async def build_market_section(settings: Settings) -> str:
 
 async def build_morning_report(settings: Settings) -> str | None:
     """Return the combined morning text, or None if every section failed."""
-    sections: list[str] = [MORNING_GREETING]
+    sections: list[str] = [_greeting(settings)]
 
     try:
         sections.append(await build_weather_section(settings))

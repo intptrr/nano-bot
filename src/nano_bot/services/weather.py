@@ -98,9 +98,8 @@ class DailyForecast:
     location_name: str = ""
 
     def format(self) -> str:
-        pretty_date = self.forecast_date.strftime("%a, %b %d")
         emoji = WMO_EMOJI.get(self.weather_code, "\U0001f324\ufe0f")
-        header = f"{emoji} <b>Weather</b> \u2014 {pretty_date}"
+        header = f"{emoji} <b>Weather</b>"
         if self.location_name:
             header += f"\n{self.location_name}"
         return (
