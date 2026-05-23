@@ -43,7 +43,8 @@ async def build_morning_report(settings: Settings) -> str | None:
     except Exception:
         log.exception("Weather section failed")
 
-    if settings.tickers:
+    is_weekend = datetime.now(ZoneInfo(settings.timezone)).weekday() >= 5
+    if settings.tickers and not is_weekend:
         try:
             market = await build_market_section(settings)
             if market:
