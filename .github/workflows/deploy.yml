@@ -71,8 +71,19 @@ jobs:
           script: |
             set -e
             cd ~/apps/nano-bot
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            docker pull "${IMAGE}:latest"
+            for attempt in 1 2 3; do
+              if echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin && docker pull "${IMAGE}:latest"; then
+                break
+              fi
+
+              if [ "$attempt" -eq 3 ]; then
+                echo "Unable to authenticate to GHCR and pull image after 3 attempts." >&2
+                exit 1
+              fi
+
+              echo "GHCR auth/pull failed (attempt ${attempt}), retrying in 10s..." >&2
+              sleep 10
+            done
             docker rm -f nano-bot 2>/dev/null || true
             docker run -d \
               --name nano-bot \
@@ -86,5 +97,5 @@ jobs:
             docker logout ghcr.io
         env:
           IMAGE: ${{ env.IMAGE }}
-          GHCR_USER: ${{ github.actor }}
+          GHCR_USER: ${{ github.repository_owner }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
