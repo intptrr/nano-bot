@@ -37,14 +37,6 @@ Message the bot with `/start` to discover your chat id.
 - `.env` is gitignored; `.env.example` is tracked. **Never put real values in `.env.example`.**
 - `BOT_TOKEN` (from [@BotFather](https://t.me/BotFather)) and `CHAT_IDS` are the only true secrets; everything else has sensible defaults.
 - If a token ever leaks, revoke it in @BotFather via `/revoke` and issue a new one.
-- A `pre-commit` config with [gitleaks](https://github.com/gitleaks/gitleaks) blocks accidental commits of high-entropy strings (Telegram tokens, API keys, private keys). Install once per clone:
-
-  ```bash
-  uv tool install pre-commit
-  pre-commit install
-  ```
-
-  Run on demand against the whole repo: `pre-commit run --all-files`.
 
 ## Run
 
