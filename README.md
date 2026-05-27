@@ -1,4 +1,4 @@
-# nano-bot
+# Nano Bot
 
 A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/) v3, managed with [uv](https://docs.astral.sh/uv/).
 
