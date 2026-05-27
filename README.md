@@ -27,7 +27,7 @@ src/nano_bot/
 ```bash
 uv sync
 cp .env.example .env
-# edit .env: BOT_TOKEN, CHAT_IDS, LATITUDE/LONGITUDE, LOCATION_NAME, TIMEZONE, NOTIFY_TIME, TICKERS
+# edit .env: BOT_TOKEN, CHAT_IDS, LOCATION_NAME, TIMEZONE, NOTIFY_TIME, TICKERS
 ```
 
 Message the bot with `/start` to discover your chat id.
@@ -113,8 +113,7 @@ All values are read from `.env` (see `.env.example`).
 |---|---|---|
 | `BOT_TOKEN` | yes | Telegram bot token from [@BotFather](https://t.me/BotFather) |
 | `CHAT_IDS` | yes | Comma-separated chat ids for the morning broadcast |
-| `LATITUDE` / `LONGITUDE` | yes | Coordinates for the weather forecast |
-| `LOCATION_NAME` | no | Display name shown in the weather header (e.g. `Bellevue, WA`) |
+| `LOCATION_NAME` | yes | City name geocoded via Open-Meteo (e.g. `Bellevue, WA`) |
 | `TIMEZONE` | no | IANA tz for the cron job (default `UTC`) |
 | `NOTIFY_TIME` | no | `HH:MM` local time for the morning broadcast (default `08:00`) |
 | `TICKERS` | no | Comma-separated Yahoo Finance symbols; leave empty to disable the market section |

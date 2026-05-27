@@ -1,4 +1,5 @@
 """Application entry point."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,8 +18,8 @@ log = logging.getLogger(__name__)
 
 BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="start", description="Greet and show chat id"),
-    BotCommand(command="weather", description="Today's forecast"),
-    BotCommand(command="stocks", description="Ticker quotes"),
+    BotCommand(command="weather", description="Forecast (optional: city)"),
+    BotCommand(command="stock", description="Stock quotes (optional: TICKER ...)"),
     BotCommand(command="help", description="List commands"),
 ]
 

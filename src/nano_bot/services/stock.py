@@ -1,4 +1,5 @@
 """Stock quote helpers backed by yfinance (Yahoo Finance)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -105,7 +106,9 @@ def _fetch_one(symbol: str) -> Quote | None:
     change_pct = (last - prev) / prev * 100 if prev else 0.0
     change_pct_week = _pct_change_over(closes, 5)
     change_pct_month = _pct_change_over(closes, 21)
-    currency = (ticker.fast_info.get("currency") if hasattr(ticker, "fast_info") else None) or "USD"
+    currency = (
+        ticker.fast_info.get("currency") if hasattr(ticker, "fast_info") else None
+    ) or "USD"
     return Quote(
         symbol=symbol.upper(),
         price=last,
@@ -114,6 +117,11 @@ def _fetch_one(symbol: str) -> Quote | None:
         change_pct_month=change_pct_month,
         currency=currency,
     )
+
+
+async def fetch_quote(symbol: str) -> Quote | None:
+    """Fetch a single quote off the event loop (yfinance is sync)."""
+    return await asyncio.to_thread(_fetch_one, symbol)
 
 
 async def fetch_quotes(symbols: list[str]) -> list[Quote]:

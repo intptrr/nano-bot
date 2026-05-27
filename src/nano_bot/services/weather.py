@@ -1,4 +1,5 @@
 """Open-Meteo weather client. No API key required."""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,11 +12,14 @@ import aiohttp
 from ._retry import retry_async
 
 API_URL = "https://api.open-meteo.com/v1/forecast"
+GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
 logger = logging.getLogger(__name__)
 
 # Status codes worth retrying (transient upstream / rate-limit issues).
 _RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+
+_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=15)
 
 
 class _TransientHTTPError(Exception):
@@ -58,23 +62,23 @@ WMO_CODE: dict[int, str] = {
 }
 
 WMO_EMOJI: dict[int, str] = {
-    0: "\u2600\ufe0f",        # ☀️
-    1: "\U0001f324\ufe0f",    # 🌤
-    2: "\u26c5",              # ⛅
-    3: "\u2601\ufe0f",        # ☁️
-    45: "\U0001f32b\ufe0f",   # 🌫
+    0: "\u2600\ufe0f",  # ☀️
+    1: "\U0001f324\ufe0f",  # 🌤
+    2: "\u26c5",  # ⛅
+    3: "\u2601\ufe0f",  # ☁️
+    45: "\U0001f32b\ufe0f",  # 🌫
     48: "\U0001f32b\ufe0f",
-    51: "\U0001f327\ufe0f",   # 🌧
+    51: "\U0001f327\ufe0f",  # 🌧
     53: "\U0001f327\ufe0f",
     55: "\U0001f327\ufe0f",
     61: "\U0001f327\ufe0f",
     63: "\U0001f327\ufe0f",
-    65: "\u26c8\ufe0f",       # ⛈
-    71: "\U0001f328\ufe0f",   # 🌨
+    65: "\u26c8\ufe0f",  # ⛈
+    71: "\U0001f328\ufe0f",  # 🌨
     73: "\U0001f328\ufe0f",
     75: "\U0001f328\ufe0f",
     77: "\U0001f328\ufe0f",
-    80: "\U0001f326\ufe0f",   # 🌦
+    80: "\U0001f326\ufe0f",  # 🌦
     81: "\U0001f327\ufe0f",
     82: "\u26c8\ufe0f",
     85: "\U0001f328\ufe0f",
@@ -83,6 +87,66 @@ WMO_EMOJI: dict[int, str] = {
     96: "\u26c8\ufe0f",
     99: "\u26c8\ufe0f",
 }
+
+
+async def _get_json(url: str, params: dict, description: str) -> dict:
+    """GET `url` and return parsed JSON, with retry on transient errors."""
+    async with aiohttp.ClientSession(timeout=_HTTP_TIMEOUT) as session:
+
+        async def _request() -> dict:
+            async with session.get(url, params=params) as resp:
+                if resp.status in _RETRY_STATUSES:
+                    raise _TransientHTTPError(f"HTTP {resp.status} from {description}")
+                resp.raise_for_status()
+                return await resp.json()
+
+        return await retry_async(
+            _request,
+            logger=logger,
+            description=description,
+            retry_exceptions=_RETRY_EXCEPTIONS,
+        )
+
+
+class CityNotFoundError(Exception):
+    """Raised when geocoding returns no result for the given city name."""
+
+
+@dataclass(slots=True, frozen=True)
+class GeocodedLocation:
+    latitude: float
+    longitude: float
+    display_name: str
+    timezone: str
+
+
+async def geocode_city(name: str) -> GeocodedLocation:
+    """Resolve a city name to a `GeocodedLocation`.
+
+    Uses Open-Meteo's free geocoding API. Raises CityNotFoundError if no match.
+    """
+    params = {"name": name, "count": 1, "language": "en", "format": "json"}
+    data = await _get_json(
+        GEOCODING_URL,
+        params,
+        description=f"Open-Meteo geocoding for {name!r}",
+    )
+
+    results = data.get("results") or []
+    if not results:
+        raise CityNotFoundError(f"No location found for {name!r}")
+    top = results[0]
+    display_parts = [top.get("name") or name]
+    if top.get("admin1"):
+        display_parts.append(top["admin1"])
+    if top.get("country"):
+        display_parts.append(top["country"])
+    return GeocodedLocation(
+        latitude=float(top["latitude"]),
+        longitude=float(top["longitude"]),
+        display_name=", ".join(display_parts),
+        timezone=top.get("timezone") or "auto",
+    )
 
 
 @dataclass(slots=True)
@@ -113,16 +177,13 @@ class DailyForecast:
         )
 
 
-async def fetch_daily_forecast(
-    latitude: float,
-    longitude: float,
-    timezone: str,
-    location_name: str = "",
-) -> DailyForecast:
+async def fetch_daily_forecast(city: str) -> DailyForecast:
+    """Fetch today's forecast for a city name (geocoded via Open-Meteo)."""
+    location = await geocode_city(city)
     params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "timezone": timezone,
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "timezone": location.timezone,
         "forecast_days": 1,
         "daily": ",".join(
             [
@@ -135,22 +196,7 @@ async def fetch_daily_forecast(
             ]
         ),
     }
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-
-        async def _request() -> dict:
-            async with session.get(API_URL, params=params) as resp:
-                if resp.status in _RETRY_STATUSES:
-                    raise _TransientHTTPError(f"HTTP {resp.status} from Open-Meteo")
-                resp.raise_for_status()
-                return await resp.json()
-
-        data = await retry_async(
-            _request,
-            logger=logger,
-            description="Open-Meteo forecast",
-            retry_exceptions=_RETRY_EXCEPTIONS,
-        )
+    data = await _get_json(API_URL, params, description="Open-Meteo forecast")
 
     daily = data["daily"]
     code = int(daily["weather_code"][0])
@@ -163,5 +209,5 @@ async def fetch_daily_forecast(
         precipitation_mm=float(daily["precipitation_sum"][0]),
         precipitation_probability=int(daily["precipitation_probability_max"][0] or 0),
         wind_speed_max=float(daily["wind_speed_10m_max"][0]),
-        location_name=location_name,
+        location_name=location.display_name,
     )

@@ -7,7 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .config import Settings
-from .services.stocks import fetch_quotes, format_report
+from .services.stock import fetch_quotes, format_report
 from .services.weather import fetch_daily_forecast
 
 log = logging.getLogger(__name__)
@@ -31,12 +31,7 @@ def _greeting(settings: Settings) -> str:
 
 
 async def build_weather_section(settings: Settings) -> str:
-    forecast = await fetch_daily_forecast(
-        settings.latitude,
-        settings.longitude,
-        settings.timezone,
-        settings.location_name,
-    )
+    forecast = await fetch_daily_forecast(settings.location_name)
     return forecast.format()
 
 

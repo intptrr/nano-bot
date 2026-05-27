@@ -1,4 +1,5 @@
 """Runtime configuration loaded from environment / .env."""
+
 from __future__ import annotations
 
 import os
@@ -31,8 +32,6 @@ def _parse_hhmm(raw: str) -> tuple[int, int]:
 class Settings:
     bot_token: str
     chat_ids: list[int]
-    latitude: float
-    longitude: float
     timezone: str
     notify_hour: int
     notify_minute: int
@@ -50,8 +49,6 @@ def load_settings() -> Settings:
     return Settings(
         bot_token=_require("BOT_TOKEN"),
         chat_ids=_parse_chat_ids(_require("CHAT_IDS")),
-        latitude=float(_require("LATITUDE")),
-        longitude=float(_require("LONGITUDE")),
         timezone=os.getenv("TIMEZONE", "UTC"),
         notify_hour=hour,
         notify_minute=minute,
