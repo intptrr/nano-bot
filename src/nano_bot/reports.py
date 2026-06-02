@@ -26,8 +26,8 @@ def report_metrics() -> dict[str, int]:
 
 
 def _greeting(settings: Settings) -> str:
-    today = datetime.now(ZoneInfo(settings.timezone)).strftime("%A, %B %d")
-    return f"Good morning! Today is {today}."
+    today = datetime.now(ZoneInfo(settings.timezone)).strftime("%b %-d, %Y (%a)")
+    return f"<b>Good morning!</b>\nToday is {today}."
 
 
 async def build_weather_section(settings: Settings) -> str:
