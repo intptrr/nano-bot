@@ -5,8 +5,8 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 ## Features
 
 - **Morning briefing** — sends a weather + market report at a set local time.
-- **Weather** (`/weather`) — today's conditions from [Open-Meteo](https://open-meteo.com/): icon, location, temp range, precipitation, and wind.
-- **Stocks** (`/stocks`) — per-ticker price with 1-day, 1-week, and 1-month change from Yahoo Finance.
+- **Weather** (`/weather [city]`) — today's conditions from [Open-Meteo](https://open-meteo.com/): icon, location, temp range, precipitation, and wind.
+- **Stocks** (`/stock [TICKER ...]`) — per-ticker price with 1-day, 1-week, and 1-month change from Yahoo Finance.
 
 ## Layout
 
@@ -14,12 +14,13 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 src/nano_bot/
   app.py           # entry point: wires bot, dispatcher, scheduler
   config.py        # Settings dataclass + .env loader
-  handlers.py      # aiogram Router (/start, /help, /weather, /stocks, echo)
+  handlers.py      # aiogram Router (/start, /help, /weather, /stock, echo)
   reports.py       # composes morning report from services
   scheduler.py     # APScheduler cron job for the morning broadcast
   services/
-    weather.py     # Open-Meteo client
-    stocks.py     # yfinance client
+    weather.py     # Open-Meteo client (geocoding + forecast)
+    stock.py       # yfinance client
+    _retry.py      # shared sync/async exponential-backoff retry helpers
 ```
 
 ## Setup
@@ -102,8 +103,8 @@ To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workf
 
 - `/start` — greet and show chat id
 - `/help` — list commands
-- `/weather` — today's forecast (with location, temp range, precip, wind)
-- `/stocks` — latest quote per ticker, with 1d / 1w / 1m % change
+- `/weather [city]` — today's forecast for the configured city, or a city passed as an argument (location, temp range, precip, wind)
+- `/stock [TICKER ...]` — latest quote per ticker, with 1d / 1w / 1m % change; uses configured `TICKERS` or symbols passed as arguments
 
 ## Configuration
 
@@ -123,4 +124,6 @@ All values are read from `.env` (see `.env.example`).
 An APScheduler cron job fires every day at `NOTIFY_TIME` (local `TIMEZONE`, default `08:00`) and broadcasts a combined report to every chat id in `CHAT_IDS`:
 
 - Weather forecast from [Open-Meteo](https://open-meteo.com/) (no API key).
-- Per-ticker quotes from Yahoo Finance (`yfinance`) showing price, 1-day, 1-week (~5 trading days), and 1-month (~21 trading days) percentage change. Leave `TICKERS` empty to disable the market section.
+- Per-ticker quotes from Yahoo Finance (`yfinance`) showing price, 1-day, 1-week (~5 trading days), and 1-month (~21 trading days) percentage change. Leave `TICKERS` empty to disable the market section; it is also skipped on weekends.
+
+If a section fails, it is replaced with a short placeholder so the broadcast still goes out.
