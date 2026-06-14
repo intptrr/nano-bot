@@ -20,6 +20,7 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="start", description="Greet and show chat id"),
     BotCommand(command="weather", description="Forecast (optional: city)"),
     BotCommand(command="stock", description="Stock quotes (optional: TICKER ...)"),
+    BotCommand(command="anime", description="Anime airing today (or: week)"),
     BotCommand(command="help", description="List commands"),
 ]
 
