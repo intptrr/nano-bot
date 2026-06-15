@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from aiogram import Dispatcher, Router, html
 from aiogram.filters import Command, CommandObject, CommandStart
@@ -13,6 +15,7 @@ from aiogram.types import LinkPreviewOptions, Message
 from .config import Settings
 from .reports import build_market_section
 from .services.anilist import AiringEpisode, fetch_airing_today, fetch_airing_week
+from .services.douban import DoubanItem, fetch_trending_books, fetch_trending_movies
 from .services.stock import fetch_quotes, format_report
 from .services.weather import fetch_daily_forecast
 
@@ -27,6 +30,7 @@ HELP_TEXT = (
     "/weather [city] — forecast for the configured city or a given city\n"
     "/stock [TICKER ...] — quotes for default tickers or provided ones\n"
     "/anime [week] — highly-rated anime airing today (or this week)\n"
+    "/douban [movies|books] — trending Douban movies and monthly books\n"
     "/help — list commands"
 )
 
@@ -69,6 +73,34 @@ def _render_week(episodes: list[AiringEpisode]) -> str:
                 return "\n".join(lines)
             block.append(line)
             rendered += 1
+        lines.extend(block)
+    return "\n".join(lines)
+
+
+async def _empty() -> list[DoubanItem]:
+    """Placeholder coroutine so gather can skip an unwanted Douban section."""
+    return []
+
+
+def _render_douban(
+    movies: list[DoubanItem], books: list[DoubanItem], month: str
+) -> str:
+    """Render Douban movie and book sections, truncating to fit Telegram."""
+    lines = ["\U0001f525 <b>Trending on Douban</b>"]
+    sections = (
+        ("\U0001f3ac <b>Movies</b>", movies),
+        ("\U0001f4da <b>Books</b>", books),
+    )
+    for title, items in sections:
+        if not items:
+            continue
+        block = [f"\n{title} \u00b7 {month}"]
+        for item in items:
+            candidate = "\n".join([*lines, *block, item.format()])
+            if len(candidate) > _MAX_MESSAGE_LEN:
+                lines.extend(block)
+                return "\n".join(lines)
+            block.append(item.format())
         lines.extend(block)
     return "\n".join(lines)
 
@@ -153,6 +185,33 @@ def build_router(settings: Settings) -> Router:
             log.exception("Airing schedule fetch failed")
             await message.answer(
                 "Couldn't fetch the airing schedule right now. Try again later."
+            )
+
+    @router.message(Command("douban"))
+    async def handle_douban(message: Message, command: CommandObject) -> None:
+        choice = (command.args or "").strip().lower()
+        want_movies = choice in ("", "movies")
+        want_books = choice in ("", "books")
+        if not want_movies and not want_books:
+            await message.answer("Usage: /douban [movies|books]")
+            return
+        try:
+            movies, books = await asyncio.gather(
+                fetch_trending_movies() if want_movies else _empty(),
+                fetch_trending_books() if want_books else _empty(),
+            )
+            if not movies and not books:
+                await message.answer("Couldn't load Douban trending right now.")
+                return
+            month = datetime.now(ZoneInfo(settings.timezone)).strftime("%B %Y")
+            await message.answer(
+                _render_douban(movies, books, month),
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
+        except Exception:
+            log.exception("Douban fetch failed")
+            await message.answer(
+                "Couldn't fetch Douban trending right now. Try again later."
             )
 
     return router

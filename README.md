@@ -8,6 +8,7 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 - **Weather** (`/weather [city]`) — today's conditions from [Open-Meteo](https://open-meteo.com/): icon, location, temp range, precipitation, and wind.
 - **Stocks** (`/stock [TICKER ...]`) — per-ticker price with 1-day, 1-week, and 1-month change from Yahoo Finance.
 - **Anime** (`/anime [week]`) — highly-rated anime airing today (or this week, grouped by day) from [AniList](https://anilist.co/), ranked by a popularity- and favourites-weighted score.
+- **Douban** (`/douban [movies|books]`) — trending Chinese-community picks from [Douban](https://m.douban.com/): now-showing movies and this month's hot books, each with its 10-point rating and rating count.
 
 ## Layout
 
@@ -15,13 +16,14 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 src/nano_bot/
   app.py           # entry point: wires bot, dispatcher, scheduler
   config.py        # Settings dataclass + .env loader
-  handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime)
+  handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime, /douban)
   reports.py       # composes morning report from services
   scheduler.py     # APScheduler cron job for the morning broadcast
   services/
     weather.py     # Open-Meteo client (geocoding + forecast)
     stock.py       # yfinance client
     anilist.py     # AniList client (airing schedule + weighted rating)
+    douban.py      # Douban client (trending movies + monthly books)
     _retry.py      # shared sync/async exponential-backoff retry helpers
 ```
 
@@ -108,6 +110,7 @@ To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workf
 - `/weather [city]` — today's forecast for the configured city, or a city passed as an argument (location, temp range, precip, wind)
 - `/stock [TICKER ...]` — latest quote per ticker, with 1d / 1w / 1m % change; uses configured `TICKERS` or symbols passed as arguments
 - `/anime [week]` — highly-rated anime airing today; pass `week` to list the next 7 days grouped by day. Sourced from [AniList](https://anilist.co/); each title shows a popularity- and favourites-weighted score
+- `/douban [movies|books]` — trending [Douban](https://m.douban.com/) now-showing movies and this month's hot books with their 10-point rating and rating count; pass `movies` or `books` to show just one section (content is zh-CN)
 
 ## Configuration
 

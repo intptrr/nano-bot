@@ -21,6 +21,7 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="weather", description="Forecast (optional: city)"),
     BotCommand(command="stock", description="Stock quotes (optional: TICKER ...)"),
     BotCommand(command="anime", description="Anime airing today (or: week)"),
+    BotCommand(command="douban", description="Trending Douban movies & books"),
     BotCommand(command="help", description="List commands"),
 ]
 
