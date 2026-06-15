@@ -29,7 +29,7 @@ MIN_WEIGHTED_SCORE = 70
 # titles. The effective audience v combines popularity (passive list-adds)
 # with favourites (a stronger "passion" signal), the latter scaled up by
 # _FAVOURITES_WEIGHT.
-_RATING_PRIOR = 55.0
+_RATING_PRIOR = 65.0
 _RATING_POPULARITY_WEIGHT = 100_000
 _FAVOURITES_WEIGHT = 80
 
@@ -120,13 +120,14 @@ class AiringEpisode:
     title: str
     episode: int
     site_url: str
-    score: int
+    score: int | None
     airing_at: datetime
 
     def format(self) -> str:
+        score = f"\u2b50 {self.score}" if self.score is not None else "\u2b50 N/A"
         return (
             f'<a href="{self.site_url}">{self.title}</a> '
-            f"\u00b7 Ep {self.episode} \u00b7 \u2b50 {self.score}"
+            f"\u00b7 Ep {self.episode} \u00b7 {score}"
         )
 
 
@@ -164,13 +165,6 @@ def _to_episode(entry: dict, tz: ZoneInfo) -> AiringEpisode | None:
     if media.get("format") not in _ALLOWED_FORMATS:
         return None
 
-    score = media.get("averageScore")
-    if score is None:
-        score = media.get("meanScore")
-    if score is None:
-        # No rating yet (common for brand-new titles); can't score it.
-        return None
-
     title = media.get("title") or {}
     name = title.get("english") or title.get("romaji")
     site_url = media.get("siteUrl")
@@ -178,13 +172,21 @@ def _to_episode(entry: dict, tz: ZoneInfo) -> AiringEpisode | None:
     if not name or not site_url or airing_at is None:
         return None
 
-    weighted = _weighted_rating(
-        score,
-        int(media.get("popularity") or 0),
-        int(media.get("favourites") or 0),
-    )
-    if weighted <= MIN_WEIGHTED_SCORE:
-        return None
+    score = media.get("averageScore")
+    if score is None:
+        score = media.get("meanScore")
+
+    if score is None:
+        # No rating yet (common for brand-new titles); show it unscored.
+        weighted = None
+    else:
+        weighted = _weighted_rating(
+            score,
+            int(media.get("popularity") or 0),
+            int(media.get("favourites") or 0),
+        )
+        if weighted <= MIN_WEIGHTED_SCORE:
+            return None
 
     return AiringEpisode(
         title=name,
@@ -223,11 +225,17 @@ async def _fetch_airing(
     return episodes
 
 
+def _score_sort_key(episode: AiringEpisode) -> tuple[int, int, str]:
+    """Sort rated episodes first (score desc), unrated last, then by title."""
+    unrated = episode.score is None
+    return (int(unrated), -(episode.score or 0), episode.title.lower())
+
+
 async def fetch_airing_today(timezone: str) -> list[AiringEpisode]:
-    """Fetch today's highly-rated airing anime, sorted by score descending."""
+    """Fetch today's airing anime, highest-rated first, unrated last."""
     start, end = _day_bounds(timezone)
     episodes = await _fetch_airing(timezone, start, end, _MAX_PAGES)
-    episodes.sort(key=lambda e: (-e.score, e.title.lower()))
+    episodes.sort(key=_score_sort_key)
     return episodes
 
 

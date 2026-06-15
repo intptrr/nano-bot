@@ -60,7 +60,10 @@ def _render_week(episodes: list[AiringEpisode]) -> str:
     rendered = 0
     total = len(episodes)
     for day in sorted(by_day):
-        day_episodes = sorted(by_day[day], key=lambda e: (-e.score, e.title.lower()))
+        day_episodes = sorted(
+            by_day[day],
+            key=lambda e: (e.score is None, -(e.score or 0), e.title.lower()),
+        )
         block = [f"\n<b>{day.strftime('%a, %b %-d')}</b>"]
         for episode in day_episodes:
             line = episode.format()
