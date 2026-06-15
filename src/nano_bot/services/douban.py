@@ -128,7 +128,7 @@ def _top_by_rating(items: list[DoubanItem], count: int) -> list[DoubanItem]:
     return ranked[:count]
 
 
-async def fetch_trending_movies(count: int = 10) -> list[DoubanItem]:
+async def fetch_trending_movies(count: int = 15) -> list[DoubanItem]:
     """Fetch in-theaters movies, top `count` by rating (subtitle: year / country)."""
     async with aiohttp.ClientSession(
         timeout=_HTTP_TIMEOUT, headers=_HEADERS
