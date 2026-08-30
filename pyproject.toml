@@ -8,7 +8,7 @@ dependencies = [
     "apscheduler>=3.11.3",
     "python-dotenv>=1.2.3",
     "tzdata>=2026.3",
-    "yfinance>=1.5.2",
+    "yfinance>=1.7.0",
 ]
 
 [project.scripts]
