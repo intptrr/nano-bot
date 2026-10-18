@@ -13,8 +13,9 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import LinkPreviewOptions, Message
 
 from .config import Settings
-from .reports import build_market_section
+from .reports import build_cashback_report, build_market_section
 from .services.anilist import AiringEpisode, fetch_airing_today, fetch_airing_week
+from .services.cashback import Quarter
 from .services.douban import DoubanItem, fetch_trending_books, fetch_trending_movies
 from .services.stock import fetch_quotes, format_report
 from .services.weather import fetch_daily_forecast
@@ -31,6 +32,7 @@ HELP_TEXT = (
     "/stock [TICKER ...] — quotes for default tickers or provided ones\n"
     "/anime [week] — highly-rated anime airing today (or this week)\n"
     "/douban [movies|books] — trending Douban movies and monthly books\n"
+    "/cashback — Chase and Discover 5% categories (this and next quarter)\n"
     "/help — list commands"
 )
 
@@ -216,6 +218,14 @@ def build_router(settings: Settings) -> Router:
             await message.answer(
                 "Couldn't fetch Douban trending right now. Try again later."
             )
+
+    @router.message(Command("cashback"))
+    async def handle_cashback(message: Message) -> None:
+        current = Quarter.containing(datetime.now(ZoneInfo(settings.timezone)).date())
+        await message.answer(
+            await build_cashback_report([current, current.next()]),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
 
     return router
 

@@ -9,6 +9,7 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 - **Stocks** (`/stock [TICKER ...]`) — per-ticker price with 1-day, 1-week, and 1-month change from Yahoo Finance.
 - **Anime** (`/anime [week]`) — highly-rated anime airing today (or this week, grouped by day) from [AniList](https://anilist.co/), ranked by a popularity- and favourites-weighted score.
 - **Douban** (`/douban [movies|books]`) — trending Chinese-community picks from [Douban](https://m.douban.com/): now-showing movies and this month's hot books, each with its 10-point rating and rating count.
+- **Cash back** (`/cashback`) — Chase Freedom Flex and Discover it 5% rotating categories for this and next quarter, with each card's activation window and link. A heads-up with next quarter's categories goes out on the 15th of Mar/Jun/Sep/Dec.
 
 ## Layout
 
@@ -16,14 +17,15 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 src/nano_bot/
   app.py           # entry point: wires bot, dispatcher, scheduler
   config.py        # Settings dataclass + .env loader
-  handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime, /douban)
-  reports.py       # composes morning report from services
-  scheduler.py     # APScheduler cron job for the morning broadcast
+  handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime, /douban, /cashback)
+  reports.py       # composes morning and cash back reports from services
+  scheduler.py     # APScheduler cron jobs (morning broadcast, cash back heads-up)
   services/
     weather.py     # Open-Meteo client (geocoding + forecast)
     stock.py       # yfinance client
     anilist.py     # AniList client (airing schedule + weighted rating)
     douban.py      # Douban client (trending movies + monthly books)
+    cashback.py    # Chase + Discover 5% category calendars
     _retry.py      # shared sync/async exponential-backoff retry helpers
 ```
 
@@ -111,6 +113,7 @@ To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workf
 - `/stock [TICKER ...]` — latest quote per ticker, with 1d / 1w / 1m % change; uses configured `TICKERS` or symbols passed as arguments
 - `/anime [week]` — highly-rated anime airing today; pass `week` to list the next 7 days grouped by day. Sourced from [AniList](https://anilist.co/); each title shows a popularity- and favourites-weighted score
 - `/douban [movies|books]` — trending [Douban](https://m.douban.com/) now-showing movies and this month's hot books with their 10-point rating and rating count; pass `movies` or `books` to show just one section (content is zh-CN)
+- `/cashback` — Chase Freedom Flex and Discover it 5% categories for this and next quarter, with activation windows and links
 
 ## Configuration
 
@@ -133,3 +136,12 @@ An APScheduler cron job fires every day at `NOTIFY_TIME` (local `TIMEZONE`, defa
 - Per-ticker quotes from Yahoo Finance (`yfinance`) showing price, 1-day, 1-week (~5 trading days), and 1-month (~21 trading days) percentage change. Leave `TICKERS` empty to disable the market section; it is also skipped on weekends.
 
 If a section fails, it is replaced with a short placeholder so the broadcast still goes out.
+
+## Cash back heads-up
+
+On the 15th of March, June, September and December at `NOTIFY_TIME` (local `TIMEZONE`), a separate message with next quarter's 5% categories goes to every chat id in `CHAT_IDS`. Chase opens activation that day and Discover on the 1st of the month; Discover only earns 5% after you activate, so the message lands before the quarter starts.
+
+- Chase Freedom Flex categories come from the calendar on the [Freedom Flex page](https://creditcards.chase.com/cash-back-credit-cards/freedom/flex).
+- Discover it categories come from the JSON feed behind its [5% calendar](https://www.discover.com/credit-cards/cash-back/cashback-calendar.html).
+
+Neither source is a documented API. If one fails or changes shape, that card shows a link instead and the error is logged.
