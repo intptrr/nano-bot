@@ -126,7 +126,7 @@ async def build_cashback_report(quarters: list[Quarter]) -> str:
     blocks = [
         "\n\n".join(
             [
-                f"\U0001f4b3 <b>5% cash back \u00b7 {quarter.label}</b> ({quarter.span})",
+                f"\U0001f4b3 <b>Bonus categories \u00b7 {quarter.label}</b>\n{quarter.span}",
                 _card_section(CHASE, chase, quarter),
                 _card_section(DISCOVER, discover, quarter),
             ]
