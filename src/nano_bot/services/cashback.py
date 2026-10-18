@@ -98,26 +98,20 @@ class Quarter:
 @dataclass(slots=True, frozen=True)
 class Card:
     name: str
-    activation_url: str
-    retroactive: bool
+    url: str
 
     def link(self, text: str) -> str:
-        return f'<a href="{html.escape(self.activation_url)}">{text}</a>'
+        return f'<a href="{html.escape(self.url)}">{text}</a>'
 
 
-CHASE = Card(
-    name="Chase Freedom Flex",
-    activation_url="https://www.chasebonus.com/",
-    retroactive=True,
-)
+CHASE = Card(name="Chase Freedom Flex", url=CHASE_CALENDAR_URL)
 
 DISCOVER = Card(
     name="Discover it",
-    activation_url=(
+    url=(
         "https://www.discover.com/credit-cards/cash-back/cashback-calendar.html"
         "?link=%2Fweb%2Frewards%2F5percent%2F"
     ),
-    retroactive=False,
 )
 
 
@@ -125,21 +119,12 @@ DISCOVER = Card(
 class CardBonus:
     card: Card
     categories: tuple[str, ...]
-    activation_opens: date
-    activation_closes: date
 
     def format(self) -> str:
-        window = (
-            f"{_short_date(self.activation_opens)} \u2013 "
-            f"{_short_date(self.activation_closes)}"
-        )
-        if not self.card.retroactive:
-            window += " \u00b7 not retroactive"
         return "\n".join(
             [
                 f"<b>{self.card.name}</b>",
                 *(f"\u2022 {html.escape(category)}" for category in self.categories),
-                f"{self.card.link('Activate')} {window}",
             ]
         )
 
@@ -204,12 +189,7 @@ def _parse_chase_calendar(page: str) -> Calendar:
             continue
         categories = tuple(filter(None, map(_chase_category, items.find_all("li"))))
         if categories:
-            calendar[quarter] = CardBonus(
-                card=CHASE,
-                categories=categories,
-                activation_opens=(quarter.start - timedelta(days=1)).replace(day=15),
-                activation_closes=quarter.end.replace(day=14),
-            )
+            calendar[quarter] = CardBonus(card=CHASE, categories=categories)
     return calendar
 
 
@@ -222,16 +202,10 @@ def _parse_discover_calendar(data: dict) -> Calendar:
     for offer in data.get("quarters") or []:
         title = " ".join(html.unescape(_TAG.sub("", offer.get("title") or "")).split())
         starts = offer.get("quarterLabelStartDate")
-        opens = offer.get("preEnrollmentStartDate")
-        if not title or not starts or not opens:
+        if not title or not starts:
             continue
         quarter = Quarter.containing(_parse_long_date(starts))
-        calendar[quarter] = CardBonus(
-            card=DISCOVER,
-            categories=(title,),
-            activation_opens=_parse_long_date(opens),
-            activation_closes=quarter.end,
-        )
+        calendar[quarter] = CardBonus(card=DISCOVER, categories=(title,))
     return calendar
 
 

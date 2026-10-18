@@ -9,7 +9,7 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 - **Stocks** (`/stock [TICKER ...]`) — per-ticker price with 1-day, 1-week, and 1-month change from Yahoo Finance.
 - **Anime** (`/anime [week]`) — highly-rated anime airing today (or this week, grouped by day) from [AniList](https://anilist.co/), ranked by a popularity- and favourites-weighted score.
 - **Douban** (`/douban [movies|books]`) — trending Chinese-community picks from [Douban](https://m.douban.com/): now-showing movies and this month's hot books, each with its 10-point rating and rating count.
-- **Cash back** (`/cashback`) — Chase Freedom Flex and Discover it 5% rotating categories for this and next quarter, with each card's activation window and link. A heads-up with next quarter's categories goes out on the 15th of Mar/Jun/Sep/Dec.
+- **Cash back** (`/cashback`) — Chase Freedom Flex and Discover it 5% rotating categories for this and next quarter. A heads-up with next quarter's categories goes out on the 15th of Mar/Jun/Sep/Dec.
 
 ## Layout
 
@@ -113,7 +113,7 @@ To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workf
 - `/stock [TICKER ...]` — latest quote per ticker, with 1d / 1w / 1m % change; uses configured `TICKERS` or symbols passed as arguments
 - `/anime [week]` — highly-rated anime airing today; pass `week` to list the next 7 days grouped by day. Sourced from [AniList](https://anilist.co/); each title shows a popularity- and favourites-weighted score
 - `/douban [movies|books]` — trending [Douban](https://m.douban.com/) now-showing movies and this month's hot books with their 10-point rating and rating count; pass `movies` or `books` to show just one section (content is zh-CN)
-- `/cashback` — Chase Freedom Flex and Discover it 5% categories for this and next quarter, with activation windows and links
+- `/cashback` — Chase Freedom Flex and Discover it 5% categories for this and next quarter
 
 ## Configuration
 
