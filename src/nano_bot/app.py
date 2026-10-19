@@ -25,7 +25,7 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="start", description="Greet and show chat id"),
     BotCommand(command="weather", description="Forecast (optional: city)"),
     BotCommand(command="stock", description="Stock quotes (optional: TICKER ...)"),
-    BotCommand(command="anime", description="Anime airing today (or: week)"),
+    BotCommand(command="anime", description="Top anime today (or: week, season)"),
     BotCommand(command="douban", description="Trending Douban movies & books"),
     BotCommand(command="cashback", description="Chase & Discover 5% categories"),
     BotCommand(command="flight", description="Alaska fare sales & Global Getaways"),

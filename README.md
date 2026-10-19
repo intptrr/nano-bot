@@ -7,7 +7,7 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 - **Morning briefing** — sends a weather + market report at a set local time.
 - **Weather** (`/weather [city]`) — today's conditions from [Open-Meteo](https://open-meteo.com/): icon, location, temp range, precipitation, and wind.
 - **Stocks** (`/stock [TICKER ...]`) — per-ticker price with 1-day, 1-week, and 1-month change from Yahoo Finance.
-- **Anime** (`/anime [week]`) — highly-rated anime airing today (or this week, grouped by day) from [AniList](https://anilist.co/), ranked by a popularity- and favourites-weighted score.
+- **Anime** (`/anime [week|season]`) — highly rated anime airing today, this week (grouped by day) or new this season, with Chinese names from [Bangumi](https://bgm.tv/). A notification lists the new season's best on the 21st of Jan/Apr/Jul/Oct.
 - **Douban** (`/douban [movies|books]`) — trending Chinese-community picks from [Douban](https://m.douban.com/): now-showing movies and this month's hot books, each with its 10-point rating and rating count.
 - **Cash back** (`/cashback`) — Chase Freedom Flex and Discover it 5% rotating categories for this and next quarter. A heads-up with next quarter's categories goes out on the 15th of Mar/Jun/Sep/Dec.
 - **Alaska promotions** (`/flight`) — an alert when Alaska Airlines starts a fare sale or an Atmos Rewards Global Getaways award sale, and a command to check both anytime.
@@ -19,12 +19,12 @@ src/nano_bot/
   app.py           # entry point: wires bot, dispatcher, scheduler
   config.py        # Settings dataclass + .env loader
   handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime, /douban, /cashback, /flight)
-  reports.py       # composes morning, cash back and flight reports from services
-  scheduler.py     # APScheduler cron jobs (morning broadcast, cash back heads-up, Alaska alerts)
+  reports.py       # composes morning, cash back, flight and anime reports from services
+  scheduler.py     # APScheduler cron jobs (morning broadcast, cash back heads-up, Alaska alerts, anime season)
   services/
     weather.py     # Open-Meteo client (geocoding + forecast)
     stock.py       # yfinance client
-    anilist.py     # AniList client (airing schedule + weighted rating)
+    bangumi.py     # Bangumi client (weekly calendar + seasons, vote-weighted rating)
     douban.py      # Douban client (trending movies + monthly books)
     cashback.py    # Chase + Discover 5% category calendars
     alaska.py      # Alaska fare sale + Global Getaways pages
@@ -113,7 +113,7 @@ To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workf
 - `/help` — list commands
 - `/weather [city]` — today's forecast for the configured city, or a city passed as an argument (location, temp range, precip, wind)
 - `/stock [TICKER ...]` — latest quote per ticker, with 1d / 1w / 1m % change; uses configured `TICKERS` or symbols passed as arguments
-- `/anime [week]` — highly-rated anime airing today; pass `week` to list the next 7 days grouped by day. Sourced from [AniList](https://anilist.co/); each title shows a popularity- and favourites-weighted score
+- `/anime [week|season]` — highly rated anime airing today; pass `week` for the next 7 days grouped by day, or `season` for this season's new TV anime. Sourced from [Bangumi](https://bgm.tv/) with Chinese names; each title shows its Bangumi score and vote count. Only shows scoring 6.5+ once their score is weighted by votes are listed, so brand-new shows appear after people rate them. Days follow Japan's broadcast day
 - `/douban [movies|books]` — trending [Douban](https://m.douban.com/) now-showing movies and this month's hot books with their 10-point rating and rating count; pass `movies` or `books` to show just one section (content is zh-CN)
 - `/cashback` — Chase Freedom Flex and Discover it 5% categories for this and next quarter
 - `/flight` — whether an Alaska fare sale or Global Getaways is running right now, with links to both pages
@@ -157,3 +157,7 @@ Every 2 hours from 07:00 to 21:00 (local `TIMEZONE`), the bot checks two of Alas
 - **Global Getaways** from the [Global Getaways page](https://www.alaskaair.com/content/global-getaways): discounted award flights released on Atmos Members Day (usually the first Wednesday of the month), with the book-by date, travel window, each destination's starting points and a link to the page.
 
 Each promotion is announced once; the next one alerts again after it ends. What has been sent is only kept in memory, so a promotion still running after a restart or deploy is announced again. If a page loads but no longer matches its known layouts, a one-time "page changed" alert links to it instead. `/flight` shows the current state of both pages on demand without affecting the alerts.
+
+## Anime season notification
+
+On the 21st of January, April, July and October at `NOTIFY_TIME` (local `TIMEZONE`), a separate message to every chat id in `CHAT_IDS` lists the season's highly rated new TV anime from [Bangumi](https://bgm.tv/) — the same list as `/anime season`. It goes out about three weeks into the season so new shows have collected enough votes to be rated; if none qualify yet, the message says so.

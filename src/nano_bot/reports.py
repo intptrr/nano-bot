@@ -1,15 +1,16 @@
-"""Compose the morning, cash back and flight reports from individual services."""
+"""Compose the morning, cash back, flight and anime reports from services."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .config import Settings
 from .services.alaska import PROMOTION_SOURCES, promotion_status
+from .services.bangumi import Anime, Season, fetch_calendar, fetch_season
 from .services.cashback import (
     CHASE,
     DISCOVER,
@@ -23,6 +24,11 @@ from .services.stock import fetch_quotes, format_report
 from .services.weather import fetch_daily_forecast
 
 log = logging.getLogger(__name__)
+
+MAX_MESSAGE_LEN = 4096
+
+_AIRING_TODAY = "\U0001f4fa <b>Airing today</b>"
+_AIRING_THIS_WEEK = "\U0001f4fa <b>Airing this week</b>"
 
 # Process-wide counters for observability. Reset on process restart.
 _metrics: dict[str, int] = {
@@ -142,3 +148,66 @@ async def build_flight_report() -> str:
         *(promotion_status(source) for source in PROMOTION_SOURCES)
     )
     return "\n\n".join(status.message for status in statuses)
+
+
+def _render_anime(header: str, anime: list[Anime], empty: str) -> str:
+    if not anime:
+        return f"{header}\n{empty}"
+    lines = [header]
+    for index, show in enumerate(anime):
+        candidate = "\n".join([*lines, show.format()])
+        remaining = len(anime) - index
+        footer = f"\n<i>…and {remaining} more</i>"
+        if len(candidate) + len(footer) > MAX_MESSAGE_LEN:
+            lines.append(f"<i>…and {remaining} more</i>")
+            break
+        lines.append(show.format())
+    return "\n".join(lines)
+
+
+def _render_anime_week(calendar: dict[int, list[Anime]], today: date) -> str:
+    days = [today + timedelta(days=offset) for offset in range(7)]
+    total = sum(len(calendar.get(day.isoweekday(), [])) for day in days)
+    if not total:
+        return f"{_AIRING_THIS_WEEK}\nNo highly rated anime this week."
+    lines = [_AIRING_THIS_WEEK]
+    rendered = 0
+    for day in days:
+        shows = calendar.get(day.isoweekday(), [])
+        if not shows:
+            continue
+        block = [f"\n<b>{day.strftime('%a, %b %-d')}</b>"]
+        for show in shows:
+            line = show.format()
+            remaining = total - rendered
+            footer = f"\n<i>…and {remaining} more</i>"
+            projected = "\n".join([*lines, *block, line])
+            if len(projected) + len(footer) > MAX_MESSAGE_LEN:
+                lines.extend(block)
+                lines.append(f"<i>…and {remaining} more</i>")
+                return "\n".join(lines)
+            block.append(line)
+            rendered += 1
+        lines.extend(block)
+    return "\n".join(lines)
+
+
+async def build_anime_today_report(today: date) -> str:
+    calendar = await fetch_calendar()
+    return _render_anime(
+        _AIRING_TODAY,
+        calendar.get(today.isoweekday(), []),
+        "No highly rated anime airing today.",
+    )
+
+
+async def build_anime_week_report(today: date) -> str:
+    return _render_anime_week(await fetch_calendar(), today)
+
+
+async def build_anime_season_report(season: Season) -> str:
+    return _render_anime(
+        f"\U0001f4fa <b>{season.label} season</b>",
+        await fetch_season(season),
+        "No highly rated new anime yet.",
+    )

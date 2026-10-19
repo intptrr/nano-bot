@@ -24,15 +24,17 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   @BotFather.
 - `config.py` — frozen `Settings` dataclass + `load_settings()` (.env parser).
 - `handlers.py` — aiogram router: `/start`, `/help`, `/weather [city]`,
-  `/stock [TICKER ...]`, `/anime [week]`, `/douban [movies|books]`, `/cashback`,
-  `/flight`.
-- `reports.py` — composes the morning broadcast, the cashback report and the
-  `/flight` report from services.
+  `/stock [TICKER ...]`, `/anime [week|season]`, `/douban [movies|books]`,
+  `/cashback`, `/flight`.
+- `reports.py` — composes the morning broadcast, the cashback report, the
+  `/flight` report and the anime lists from services.
 - `scheduler.py` — APScheduler cron for the daily broadcast, the quarterly
-  cashback heads-up (15th of Mar/Jun/Sep/Dec) and Alaska promotion checks
-  (every 2 hours, 07:00–21:00; alert state is in memory only).
+  cashback heads-up (15th of Mar/Jun/Sep/Dec), Alaska promotion checks
+  (every 2 hours, 07:00–21:00; alert state is in memory only) and the anime
+  season notification (21st of Jan/Apr/Jul/Oct).
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
-  `services/anilist.py` (AniList), `services/douban.py` (Douban),
+  `services/bangumi.py` (Bangumi calendar + seasons, Chinese names),
+  `services/douban.py` (Douban),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),
   `services/alaska.py` (Alaska fare sale + Global Getaways pages; parsed
