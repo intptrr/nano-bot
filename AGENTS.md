@@ -33,7 +33,8 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   (every 2 hours, 07:00–21:00; alert state is in memory only) and the anime
   season notification (21st of Jan/Apr/Jul/Oct).
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
-  `services/bangumi.py` (Bangumi calendar + seasons, Chinese names),
+  `services/bangumi.py` (Bangumi calendar + seasons, Chinese names; lists keep
+  shows scoring 6.5+ with at least 50 votes),
   `services/douban.py` (Douban),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),

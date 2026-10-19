@@ -22,16 +22,14 @@ CALENDAR_URL = "https://api.bgm.tv/calendar"
 SUBJECTS_URL = "https://api.bgm.tv/v0/subjects"
 SUBJECT_PAGE_URL = "https://bgm.tv/subject/{id}"
 
-MIN_WEIGHTED_SCORE = 6.5
+MIN_SCORE = 6.5
+MIN_VOTES = 50
 
 logger = logging.getLogger(__name__)
 
 _ANIME_TYPE = 2
 _PAGE_SIZE = 50
 _MAX_SEASON_SUBJECTS = 500
-
-_RATING_PRIOR = 6.0
-_RATING_VOTES = 150
 
 _RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 
@@ -61,11 +59,6 @@ class Anime:
     name: str
     score: float
     votes: int
-
-    @property
-    def weighted_score(self) -> float:
-        total = self.votes + _RATING_VOTES
-        return (self.votes * self.score + _RATING_VOTES * _RATING_PRIOR) / total
 
     def format(self) -> str:
         url = SUBJECT_PAGE_URL.format(id=self.subject_id)
@@ -121,8 +114,8 @@ def _to_anime(subject: dict) -> Anime:
 
 def _highly_rated(anime: Iterable[Anime]) -> list[Anime]:
     return sorted(
-        (show for show in anime if show.weighted_score >= MIN_WEIGHTED_SCORE),
-        key=lambda show: show.weighted_score,
+        (show for show in anime if show.score >= MIN_SCORE and show.votes >= MIN_VOTES),
+        key=lambda show: (show.score, show.votes),
         reverse=True,
     )
 
