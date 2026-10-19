@@ -23,7 +23,13 @@ from .reports import (
 )
 from .services.bangumi import Season
 from .services.cashback import Quarter
-from .services.douban import DoubanItem, fetch_trending_books, fetch_trending_movies
+from .services.douban import (
+    DoubanItem,
+    UpcomingMovie,
+    fetch_anticipated_movies,
+    fetch_trending_books,
+    fetch_trending_movies,
+)
 from .services.stock import fetch_quotes, format_report
 from .services.weather import fetch_daily_forecast
 
@@ -35,7 +41,7 @@ HELP_TEXT = (
     "/weather [city] — forecast for the configured city or a given city\n"
     "/stock [TICKER ...] — quotes for default tickers or provided ones\n"
     "/anime [week|season] — highly rated anime airing today, this week or this season\n"
-    "/douban [movies|books] — trending Douban movies and monthly books\n"
+    "/douban [movies|books] — new and upcoming Douban movies, and monthly books\n"
     "/cashback — Chase and Discover 5% categories (this and next quarter)\n"
     "/flight — Alaska fare sales and Global Getaways right now\n"
     "/help — list commands"
@@ -48,18 +54,22 @@ async def _empty() -> list[DoubanItem]:
 
 
 def _render_douban(
-    movies: list[DoubanItem], books: list[DoubanItem], month: str
+    movies: list[DoubanItem],
+    upcoming: list[UpcomingMovie],
+    books: list[DoubanItem],
+    month: str,
 ) -> str:
     """Render Douban movie and book sections, truncating to fit Telegram."""
     lines = ["\U0001f525 <b>Trending on Douban</b>"]
     sections = (
-        ("\U0001f3ac <b>Movies</b>", movies),
-        ("\U0001f4da <b>Books</b>", books),
+        (f"\U0001f3ac <b>Movies</b> \u00b7 {month}", movies),
+        ("\u23f3 <b>Most anticipated</b>", upcoming),
+        (f"\U0001f4da <b>Books</b> \u00b7 {month}", books),
     )
     for title, items in sections:
         if not items:
             continue
-        block = [f"\n{title} \u00b7 {month}"]
+        block = [f"\n{title}"]
         for item in items:
             candidate = "\n".join([*lines, *block, item.format()])
             if len(candidate) > MAX_MESSAGE_LEN:
@@ -159,16 +169,17 @@ def build_router(settings: Settings) -> Router:
             await message.answer("Usage: /douban [movies|books]")
             return
         try:
-            movies, books = await asyncio.gather(
+            movies, upcoming, books = await asyncio.gather(
                 fetch_trending_movies() if want_movies else _empty(),
+                fetch_anticipated_movies() if want_movies else _empty(),
                 fetch_trending_books() if want_books else _empty(),
             )
-            if not movies and not books:
+            if not movies and not upcoming and not books:
                 await message.answer("Couldn't load Douban trending right now.")
                 return
             month = datetime.now(ZoneInfo(settings.timezone)).strftime("%B %Y")
             await message.answer(
-                _render_douban(movies, books, month),
+                _render_douban(movies, upcoming, books, month),
                 link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
         except Exception:

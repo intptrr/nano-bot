@@ -9,7 +9,7 @@ A personal assistant Telegram bot built on [aiogram](https://docs.aiogram.dev/) 
 | `/weather [city]` | Today's forecast for `LOCATION_NAME` or a given city ([Open-Meteo](https://open-meteo.com/)) |
 | `/stock [TICKER ...]` | Price with 1-day, 1-week and 1-month change for `TICKERS` or the given symbols |
 | `/anime [week\|season]` | Highly rated Japanese anime airing today, this week or this season, with Chinese names ([Bangumi](https://bgm.tv/)) |
-| `/douban [movies\|books]` | Trending [Douban](https://m.douban.com/) movies and books |
+| `/douban [movies\|books]` | New and upcoming movies and trending books on [Douban](https://m.douban.com/) |
 | `/cashback` | Chase Freedom Flex and Discover it 5% categories for this and next quarter |
 | `/flight` | Current Alaska Airlines fare sale and Global Getaways |
 | `/start`, `/help` | Show your chat id; list commands |
@@ -38,7 +38,7 @@ src/nano_bot/
     weather.py     # Open-Meteo forecast
     stock.py       # Yahoo Finance quotes
     bangumi.py     # Bangumi anime calendar + seasons
-    douban.py      # Douban trending movies + books
+    douban.py      # Douban new + upcoming movies, books
     cashback.py    # Chase + Discover 5% calendars
     alaska.py      # Alaska fare sales + Global Getaways
     _retry.py      # shared retry helpers

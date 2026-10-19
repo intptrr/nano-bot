@@ -40,7 +40,11 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   before it through its end, counting in-season premieres directly and older
   shows only if an episode airs after the season's first two weeks; the
   season list is cached for the day),
-  `services/douban.py` (Douban),
+  `services/douban.py` (Douban mobile API, list endpoints only since per-film
+  lookups are rate-limited per IP after ~20 requests; movies that opened in
+  Chinese cinemas in the last 2 months scoring 6.5+, the top 5 upcoming by
+  想看, and monthly hot books; re-releases are dropped by the production year
+  that starts each card subtitle),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),
   `services/alaska.py` (Alaska fare sale + Global Getaways pages; parsed
