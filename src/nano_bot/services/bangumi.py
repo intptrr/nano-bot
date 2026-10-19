@@ -1,10 +1,11 @@
 """Bangumi (bgm.tv) anime: the weekly airing calendar and seasonal lineups.
 
 Public API with no key; Bangumi asks clients to send a descriptive User-Agent.
-Names are Chinese where Bangumi has one, otherwise the original title. The
-calendar's weekdays follow Japan's broadcast day. A season's lineup is every
-TV or web show that started within the six months before the season's end and
-has an episode airing after the season's first two weeks.
+Only Japanese anime are listed (Bangumi's 日本 tag). Names are Chinese where
+Bangumi has one, otherwise the original title. The calendar's weekdays follow
+Japan's broadcast day. A season's lineup is every Japanese TV or web show that
+started from three months before the season through its end and either
+premiered in the season or has an episode airing after its first two weeks.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from ._retry import retry_async
 
 CALENDAR_URL = "https://api.bgm.tv/calendar"
 SUBJECTS_URL = "https://api.bgm.tv/v0/subjects"
+SUBJECT_URL = "https://api.bgm.tv/v0/subjects/{id}"
 EPISODES_URL = "https://api.bgm.tv/v0/episodes"
 SUBJECT_PAGE_URL = "https://bgm.tv/subject/{id}"
 
@@ -32,8 +34,9 @@ logger = logging.getLogger(__name__)
 
 _ANIME_TYPE = 2
 _MAIN_EPISODE_TYPE = 0
+_JAPAN_TAG = "日本"
 _SEASON_PLATFORMS = frozenset({"TV", "WEB"})
-_LOOKBACK_MONTHS = 6
+_LOOKBACK_MONTHS = 3
 _SEASON_MONTHS = 3
 _AIRING_GRACE = timedelta(days=14)
 _MAX_WEEKS_PER_EPISODE = 2
@@ -121,6 +124,7 @@ class Season:
 
 
 _season_cache: dict[Season, tuple[date, list[Anime]]] = {}
+_japanese_cache: dict[int, bool] = {}
 
 
 async def _get_json(
@@ -161,6 +165,10 @@ def _to_anime(subject: dict) -> Anime:
     )
 
 
+def _is_japanese(subject: dict) -> bool:
+    return _JAPAN_TAG in (subject.get("meta_tags") or [])
+
+
 def _is_highly_rated(show: Anime) -> bool:
     return show.score >= MIN_SCORE and show.votes >= MIN_VOTES
 
@@ -173,16 +181,44 @@ def _highly_rated(anime: Iterable[Anime]) -> list[Anime]:
     )
 
 
+async def _remember_origins(
+    session: aiohttp.ClientSession, subject_ids: Iterable[int]
+) -> None:
+    unknown = [
+        subject_id for subject_id in subject_ids if subject_id not in _japanese_cache
+    ]
+    subjects = await asyncio.gather(
+        *(
+            _get_json(
+                session,
+                SUBJECT_URL.format(id=subject_id),
+                f"Bangumi subject {subject_id}",
+            )
+            for subject_id in unknown
+        )
+    )
+    for subject_id, subject in zip(unknown, subjects, strict=True):
+        _japanese_cache[subject_id] = _is_japanese(subject)
+
+
 async def fetch_calendar() -> dict[int, list[Anime]]:
     async with aiohttp.ClientSession(
         timeout=_HTTP_TIMEOUT, headers=_HEADERS
     ) as session:
         days = await _get_json(session, CALENDAR_URL, "Bangumi calendar")
-    return {
-        int(day["weekday"]["id"]): _highly_rated(
-            _to_anime(item) for item in day.get("items") or []
+        calendar = {
+            int(day["weekday"]["id"]): _highly_rated(
+                _to_anime(item) for item in day.get("items") or []
+            )
+            for day in days
+        }
+        await _remember_origins(
+            session,
+            {show.subject_id for shows in calendar.values() for show in shows},
         )
-        for day in days
+    return {
+        weekday: [show for show in shows if _japanese_cache[show.subject_id]]
+        for weekday, shows in calendar.items()
     }
 
 
@@ -224,10 +260,16 @@ def _could_air_during(subject: dict, season: Season) -> bool:
 def _is_season_candidate(subject: dict, season: Season) -> bool:
     return (
         subject.get("platform") in _SEASON_PLATFORMS
+        and _is_japanese(subject)
         and not subject.get("nsfw")
         and _is_highly_rated(_to_anime(subject))
         and _could_air_during(subject, season)
     )
+
+
+def _premiered_in(subject: dict, season: Season) -> bool:
+    started = _parse_date(subject.get("date"))
+    return started is not None and started >= season.start
 
 
 async def _airs_during(
@@ -267,13 +309,23 @@ async def _fetch_season(season: Season) -> list[Anime]:
             for subject in subjects
             if _is_season_candidate(subject, season)
         }
+        carried_over = [
+            subject_id
+            for subject_id, subject in candidates.items()
+            if not _premiered_in(subject, season)
+        ]
         airing = await asyncio.gather(
-            *(_airs_during(session, subject_id, season) for subject_id in candidates)
+            *(_airs_during(session, subject_id, season) for subject_id in carried_over)
         )
+    still_airing = {
+        subject_id
+        for subject_id, airs in zip(carried_over, airing, strict=True)
+        if airs
+    }
     return _highly_rated(
         _to_anime(subject)
-        for subject, airs in zip(candidates.values(), airing, strict=True)
-        if airs
+        for subject_id, subject in candidates.items()
+        if _premiered_in(subject, season) or subject_id in still_airing
     )
 
 

@@ -33,11 +33,13 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   (every 2 hours, 07:00–21:00; alert state is in memory only) and the anime
   season notification (21st of Jan/Apr/Jul/Oct).
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
-  `services/bangumi.py` (Bangumi calendar + seasons, Chinese names; lists keep
-  shows scoring 6.5+ with at least 50 votes; a season is every TV/web show
-  that started within the 6 months before its end and has an episode airing
-  after its first two weeks, checked per show via episode air dates and cached
-  for the day),
+  `services/bangumi.py` (Bangumi calendar + seasons, Chinese names; Japanese
+  anime only via the `日本` meta tag, which calendar shows need a per-show
+  lookup for, cached in memory; lists keep shows scoring 6.5+ with at least
+  50 votes; a season is every Japanese TV/web show that started from 3 months
+  before it through its end, counting in-season premieres directly and older
+  shows only if an episode airs after the season's first two weeks; the
+  season list is cached for the day),
   `services/douban.py` (Douban),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),
