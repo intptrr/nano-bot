@@ -2,7 +2,9 @@
 
 Public API with no key; Bangumi asks clients to send a descriptive User-Agent.
 Names are Chinese where Bangumi has one, otherwise the original title. The
-calendar's weekdays follow Japan's broadcast day.
+calendar's weekdays follow Japan's broadcast day. A season's lineup is every
+TV or web show that started within the six months before the season's end and
+has an episode airing after the season's first two weeks.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ import html
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import aiohttp
 
@@ -20,6 +22,7 @@ from ._retry import retry_async
 
 CALENDAR_URL = "https://api.bgm.tv/calendar"
 SUBJECTS_URL = "https://api.bgm.tv/v0/subjects"
+EPISODES_URL = "https://api.bgm.tv/v0/episodes"
 SUBJECT_PAGE_URL = "https://bgm.tv/subject/{id}"
 
 MIN_SCORE = 6.5
@@ -28,8 +31,17 @@ MIN_VOTES = 50
 logger = logging.getLogger(__name__)
 
 _ANIME_TYPE = 2
+_MAIN_EPISODE_TYPE = 0
+_SEASON_PLATFORMS = frozenset({"TV", "WEB"})
+_LOOKBACK_MONTHS = 6
+_SEASON_MONTHS = 3
+_AIRING_GRACE = timedelta(days=14)
+_MAX_WEEKS_PER_EPISODE = 2
+
 _PAGE_SIZE = 50
-_MAX_SEASON_SUBJECTS = 500
+_MAX_MONTH_SUBJECTS = 500
+_EPISODE_PAGE_SIZE = 200
+_MAX_EPISODES = 1000
 
 _RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 
@@ -39,6 +51,8 @@ _HEADERS = {
     "User-Agent": "intptrr/nano-bot (https://github.com/intptrr/nano-bot)",
     "Accept": "application/json",
 }
+
+_REQUEST_SLOTS = asyncio.Semaphore(5)
 
 
 class _TransientHTTPError(Exception):
@@ -68,6 +82,11 @@ class Anime:
         )
 
 
+def _month_start(year: int, month: int, offset: int) -> date:
+    index = year * 12 + month - 1 + offset
+    return date(index // 12, index % 12 + 1, 1)
+
+
 @dataclass(slots=True, frozen=True)
 class Season:
     year: int
@@ -78,28 +97,58 @@ class Season:
         return cls(day.year, (day.month - 1) // 3 * 3 + 1)
 
     @property
+    def start(self) -> date:
+        return date(self.year, self.month, 1)
+
+    @property
+    def end(self) -> date:
+        return _month_start(self.year, self.month, _SEASON_MONTHS) - timedelta(days=1)
+
+    @property
+    def airing_from(self) -> date:
+        return self.start + _AIRING_GRACE
+
+    @property
+    def candidate_months(self) -> list[date]:
+        return [
+            _month_start(self.year, self.month, offset)
+            for offset in range(-_LOOKBACK_MONTHS, _SEASON_MONTHS)
+        ]
+
+    @property
     def label(self) -> str:
-        return date(self.year, self.month, 1).strftime("%B %Y")
+        return self.start.strftime("%B %Y")
 
 
-async def _get_json(url: str, description: str, params: dict | None = None):
-    async with aiohttp.ClientSession(
-        timeout=_HTTP_TIMEOUT, headers=_HEADERS
-    ) as session:
+_season_cache: dict[Season, tuple[date, list[Anime]]] = {}
 
-        async def _request():
-            async with session.get(url, params=params) as resp:
-                if resp.status in _RETRY_STATUSES:
-                    raise _TransientHTTPError(f"HTTP {resp.status} from {description}")
-                resp.raise_for_status()
-                return await resp.json()
 
-        return await retry_async(
-            _request,
-            logger=logger,
-            description=description,
-            retry_exceptions=_RETRY_EXCEPTIONS,
-        )
+async def _get_json(
+    session: aiohttp.ClientSession,
+    url: str,
+    description: str,
+    params: dict | None = None,
+):
+    async def _request():
+        async with _REQUEST_SLOTS, session.get(url, params=params) as resp:
+            if resp.status in _RETRY_STATUSES:
+                raise _TransientHTTPError(f"HTTP {resp.status} from {description}")
+            resp.raise_for_status()
+            return await resp.json()
+
+    return await retry_async(
+        _request,
+        logger=logger,
+        description=description,
+        retry_exceptions=_RETRY_EXCEPTIONS,
+    )
+
+
+def _parse_date(text: str | None) -> date | None:
+    try:
+        return date.fromisoformat(text) if text else None
+    except ValueError:
+        return None
 
 
 def _to_anime(subject: dict) -> Anime:
@@ -112,16 +161,23 @@ def _to_anime(subject: dict) -> Anime:
     )
 
 
+def _is_highly_rated(show: Anime) -> bool:
+    return show.score >= MIN_SCORE and show.votes >= MIN_VOTES
+
+
 def _highly_rated(anime: Iterable[Anime]) -> list[Anime]:
     return sorted(
-        (show for show in anime if show.score >= MIN_SCORE and show.votes >= MIN_VOTES),
+        filter(_is_highly_rated, anime),
         key=lambda show: (show.score, show.votes),
         reverse=True,
     )
 
 
 async def fetch_calendar() -> dict[int, list[Anime]]:
-    days = await _get_json(CALENDAR_URL, "Bangumi calendar")
+    async with aiohttp.ClientSession(
+        timeout=_HTTP_TIMEOUT, headers=_HEADERS
+    ) as session:
+        days = await _get_json(session, CALENDAR_URL, "Bangumi calendar")
     return {
         int(day["weekday"]["id"]): _highly_rated(
             _to_anime(item) for item in day.get("items") or []
@@ -130,17 +186,20 @@ async def fetch_calendar() -> dict[int, list[Anime]]:
     }
 
 
-async def fetch_season(season: Season) -> list[Anime]:
+async def _subjects_started_in(
+    session: aiohttp.ClientSession, month: date
+) -> list[dict]:
     subjects: list[dict] = []
-    for offset in range(0, _MAX_SEASON_SUBJECTS, _PAGE_SIZE):
+    for offset in range(0, _MAX_MONTH_SUBJECTS, _PAGE_SIZE):
         page = await _get_json(
+            session,
             SUBJECTS_URL,
-            f"Bangumi {season.label} anime",
+            f"Bangumi anime starting {month:%B %Y}",
             params={
                 "type": _ANIME_TYPE,
-                "year": season.year,
-                "month": season.month,
-                "sort": "rank",
+                "year": month.year,
+                "month": month.month,
+                "sort": "date",
                 "limit": _PAGE_SIZE,
                 "offset": offset,
             },
@@ -148,8 +207,81 @@ async def fetch_season(season: Season) -> list[Anime]:
         subjects.extend(page.get("data") or [])
         if offset + _PAGE_SIZE >= int(page.get("total") or 0):
             break
+    return subjects
+
+
+def _could_air_during(subject: dict, season: Season) -> bool:
+    started = _parse_date(subject.get("date"))
+    if started is None or started > season.end:
+        return False
+    episodes = max(
+        int(subject.get("eps") or 0), int(subject.get("total_episodes") or 0)
+    )
+    latest_end = started + timedelta(weeks=_MAX_WEEKS_PER_EPISODE * episodes)
+    return not episodes or latest_end >= season.airing_from
+
+
+def _is_season_candidate(subject: dict, season: Season) -> bool:
+    return (
+        subject.get("platform") in _SEASON_PLATFORMS
+        and not subject.get("nsfw")
+        and _is_highly_rated(_to_anime(subject))
+        and _could_air_during(subject, season)
+    )
+
+
+async def _airs_during(
+    session: aiohttp.ClientSession, subject_id: int, season: Season
+) -> bool:
+    for offset in range(0, _MAX_EPISODES, _EPISODE_PAGE_SIZE):
+        page = await _get_json(
+            session,
+            EPISODES_URL,
+            f"Bangumi episodes of {subject_id}",
+            params={
+                "subject_id": subject_id,
+                "type": _MAIN_EPISODE_TYPE,
+                "limit": _EPISODE_PAGE_SIZE,
+                "offset": offset,
+            },
+        )
+        for episode in page.get("data") or []:
+            aired = _parse_date(episode.get("airdate"))
+            if aired and season.airing_from <= aired <= season.end:
+                return True
+        if offset + _EPISODE_PAGE_SIZE >= int(page.get("total") or 0):
+            break
+    return False
+
+
+async def _fetch_season(season: Season) -> list[Anime]:
+    async with aiohttp.ClientSession(
+        timeout=_HTTP_TIMEOUT, headers=_HEADERS
+    ) as session:
+        months = await asyncio.gather(
+            *(_subjects_started_in(session, month) for month in season.candidate_months)
+        )
+        candidates = {
+            subject["id"]: subject
+            for subjects in months
+            for subject in subjects
+            if _is_season_candidate(subject, season)
+        }
+        airing = await asyncio.gather(
+            *(_airs_during(session, subject_id, season) for subject_id in candidates)
+        )
     return _highly_rated(
         _to_anime(subject)
-        for subject in subjects
-        if subject.get("platform") == "TV" and not subject.get("nsfw")
+        for subject, airs in zip(candidates.values(), airing, strict=True)
+        if airs
     )
+
+
+async def fetch_season(season: Season) -> list[Anime]:
+    today = date.today()
+    cached = _season_cache.get(season)
+    if cached and cached[0] == today:
+        return cached[1]
+    anime = await _fetch_season(season)
+    _season_cache[season] = (today, anime)
+    return anime

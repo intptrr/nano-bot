@@ -209,5 +209,5 @@ async def build_anime_season_report(season: Season) -> str:
     return _render_anime(
         f"\U0001f4fa <b>{season.label} season</b>",
         await fetch_season(season),
-        "No highly rated new anime yet.",
+        "No highly rated anime airing this season yet.",
     )

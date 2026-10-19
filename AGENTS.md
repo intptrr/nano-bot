@@ -34,7 +34,10 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   season notification (21st of Jan/Apr/Jul/Oct).
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
   `services/bangumi.py` (Bangumi calendar + seasons, Chinese names; lists keep
-  shows scoring 6.5+ with at least 50 votes),
+  shows scoring 6.5+ with at least 50 votes; a season is every TV/web show
+  that started within the 6 months before its end and has an episode airing
+  after its first two weeks, checked per show via episode air dates and cached
+  for the day),
   `services/douban.py` (Douban),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),
