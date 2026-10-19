@@ -8,7 +8,8 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import BotCommand, BotCommandScopeChat
 
 from .config import Settings, load_settings
 from .handlers import register_handlers
@@ -35,6 +36,17 @@ def build_bot(settings: Settings) -> Bot:
     )
 
 
+async def register_commands(bot: Bot, settings: Settings) -> None:
+    await bot.set_my_commands(BOT_COMMANDS)
+    for chat_id in settings.chat_ids:
+        try:
+            await bot.set_my_commands(
+                BOT_COMMANDS, scope=BotCommandScopeChat(chat_id=chat_id)
+            )
+        except TelegramBadRequest:
+            log.exception("Failed to register commands for chat %s", chat_id)
+
+
 async def run(settings: Settings) -> None:
     bot = build_bot(settings)
     dp = Dispatcher()
@@ -43,7 +55,7 @@ async def run(settings: Settings) -> None:
     scheduler = build_scheduler(bot, settings)
     scheduler.start()
     try:
-        await bot.set_my_commands(BOT_COMMANDS)
+        await register_commands(bot, settings)
         await dp.start_polling(bot)
     finally:
         scheduler.shutdown(wait=False)
