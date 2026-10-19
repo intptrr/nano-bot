@@ -12,6 +12,7 @@ A personal assistant Telegram bot built on [aiogram](https://docs.aiogram.dev/) 
 | `/douban [movies\|books]` | New and upcoming movies and trending books on [Douban](https://m.douban.com/) |
 | `/cashback` | Chase Freedom Flex and Discover it 5% categories for this and next quarter |
 | `/flight` | Current Alaska Airlines fare sale and Global Getaways |
+| `/tennis` | Current and upcoming tennis registration at Amy Yee and Sand Point |
 | `/start`, `/help` | Show your chat id; list commands |
 
 ## Notifications
@@ -24,6 +25,7 @@ Sent to every chat in `CHAT_IDS`, at `NOTIFY_TIME` in `TIMEZONE` unless noted:
 | 15th of Mar/Jun/Sep/Dec | Next quarter's Chase and Discover 5% categories |
 | 21st of Jan/Apr/Jul/Oct | Highly rated Japanese anime airing this season |
 | Every 2 hours, 07:00–21:00 | Alert when an Alaska fare sale or Global Getaways starts |
+| Day before and when tennis registration opens | Heads-up, then an alert |
 
 ## Layout
 
@@ -41,6 +43,7 @@ src/nano_bot/
     douban.py      # Douban new + upcoming movies, books
     cashback.py    # Chase + Discover 5% calendars
     alaska.py      # Alaska fare sales + Global Getaways
+    tennis.py      # Amy Yee + Sand Point tennis registration
     _retry.py      # shared retry helpers
 ```
 

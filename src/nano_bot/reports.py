@@ -1,8 +1,9 @@
-"""Compose the morning, cash back, flight and anime reports from services."""
+"""Compose the morning, cash back, flight, anime and tennis reports from services."""
 
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
@@ -21,6 +22,13 @@ from .services.cashback import (
     fetch_discover_calendar,
 )
 from .services.stock import fetch_quotes, format_report
+from .services.tennis import (
+    PACIFIC,
+    UNRECOGNIZED,
+    CenterStatus,
+    Opening,
+    check_centers,
+)
 from .services.weather import fetch_daily_forecast
 
 log = logging.getLogger(__name__)
@@ -211,3 +219,83 @@ async def build_anime_season_report(season: Season) -> str:
         await fetch_season(season),
         "No highly rated anime airing this season yet.",
     )
+
+
+def _tennis_link(url: str, text: str) -> str:
+    return f'<a href="{html.escape(url)}">{html.escape(text)}</a>'
+
+
+def _clock(moment: datetime) -> str:
+    return moment.strftime("%I:%M %p").lstrip("0")
+
+
+def _tennis_line(verb: str, opening: Opening) -> str:
+    return (
+        f"{verb} {opening.opens_at:%Y/%m/%d %a} {_clock(opening.opens_at)} \u00b7 "
+        f"{html.escape(opening.term)}"
+    )
+
+
+def _tennis_center_block(status: CenterStatus, now: datetime) -> str:
+    center = status.center
+    title = _tennis_link(center.register_url, center.name)
+    if status.problem:
+        check = _tennis_link(center.page_url, "Check the page")
+        return f"{title}\nCouldn't read the schedule right now. {check}"
+    opened = [opening for opening in status.openings if opening.opens_at <= now]
+    current = [
+        opening
+        for opening in opened
+        if opening.opens_at.date() == opened[-1].opens_at.date()
+    ]
+    upcoming = [opening for opening in status.openings if opening.opens_at > now]
+    lines = [title, *(_tennis_line("Opened", opening) for opening in current)]
+    lines.extend(
+        [_tennis_line("Opens", opening) for opening in upcoming]
+        or ["Next dates not posted yet."]
+    )
+    return "\n".join(lines)
+
+
+async def build_tennis_report() -> str:
+    now = datetime.now(PACIFIC)
+    statuses = await check_centers(now.date())
+    return "\n\n".join(
+        [
+            "\U0001f3be <b>Tennis registration</b>",
+            *(_tennis_center_block(status, now) for status in statuses),
+        ]
+    )
+
+
+def build_tennis_heads_up(openings: list[Opening]) -> str:
+    lines = ["\U0001f3be <b>Tennis registration opens tomorrow</b>"]
+    lines.extend(
+        f"{_clock(opening.opens_at)} \u00b7 {_tennis_link(opening.url, opening.center)}"
+        f" \u00b7 {html.escape(opening.term)}"
+        for opening in sorted(openings, key=lambda opening: opening.opens_at)
+    )
+    return "\n".join(lines)
+
+
+def build_tennis_alert(opening: Opening) -> str:
+    return (
+        "\U0001f3be <b>Tennis registration is open</b>\n"
+        f"{_tennis_link(opening.url, opening.center)} \u00b7 "
+        f"{html.escape(opening.term)}"
+    )
+
+
+def build_tennis_warning(status: CenterStatus) -> str:
+    if status.problem == UNRECOGNIZED:
+        detail = (
+            "The registration schedule changed and couldn't be read, so its "
+            "alerts are paused. Check the page for dates."
+        )
+    else:
+        detail = (
+            "Couldn't reach the website to check registration dates. I'll keep "
+            "trying; check the page in the meantime."
+        )
+    center = status.center
+    return f"\u26a0\ufe0f {_tennis_link(center.page_url, center.name)}\n{detail}"

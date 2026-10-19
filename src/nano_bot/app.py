@@ -29,6 +29,7 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="douban", description="Trending Douban movies & books"),
     BotCommand(command="cashback", description="Chase & Discover 5% categories"),
     BotCommand(command="flight", description="Alaska fare sales & Global Getaways"),
+    BotCommand(command="tennis", description="Tennis registration dates"),
     BotCommand(command="help", description="List commands"),
 ]
 

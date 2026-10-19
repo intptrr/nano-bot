@@ -25,13 +25,18 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
 - `config.py` — frozen `Settings` dataclass + `load_settings()` (.env parser).
 - `handlers.py` — aiogram router: `/start`, `/help`, `/weather [city]`,
   `/stock [TICKER ...]`, `/anime [week|season]`, `/douban [movies|books]`,
-  `/cashback`, `/flight`.
+  `/cashback`, `/flight`, `/tennis`.
 - `reports.py` — composes the morning broadcast, the cashback report, the
-  `/flight` report and the anime lists from services.
+  `/flight` report, the anime lists and the tennis registration messages from
+  services.
 - `scheduler.py` — APScheduler cron for the daily broadcast, the quarterly
   cashback heads-up (15th of Mar/Jun/Sep/Dec), Alaska promotion checks
-  (every 2 hours, 07:00–21:00; alert state is in memory only) and the anime
-  season notification (21st of Jan/Apr/Jul/Oct).
+  (every 2 hours, 07:00–21:00; alert state is in memory only), the anime
+  season notification (21st of Jan/Apr/Jul/Oct) and tennis registration: a
+  heads-up at `NOTIFY_TIME` the day before (which also warns once per center
+  when its page can't be read) and an alert at each opening time. Alerts are
+  one-off jobs held in memory, so they are scheduled at heads-up time and
+  re-planned at 00:05 Pacific and on startup.
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
   `services/bangumi.py` (Bangumi calendar + seasons, Chinese names; Japanese
   anime only via the `日本` meta tag, which calendar shows need a per-show
@@ -49,6 +54,12 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   both undocumented, parsed best-effort),
   `services/alaska.py` (Alaska fare sale + Global Getaways pages; parsed
   best-effort, unknown layouts raise `UnrecognizedPageError`),
+  `services/tennis.py` (adult tennis registration: Amy Yee Tennis Center's
+  dates from the Seattle Parks tennis page, opening at noon Pacific as
+  ActiveNet has shown; Tennis Center Sand Point's session table on its Adults
+  page, `Standard Annual` row and both adult columns, dates without a year
+  placed in the year nearest today; unknown layouts raise
+  `UnrecognizedPageError`),
   `services/_retry.py` (shared sync/async exponential-backoff retry helpers —
   reuse these for new external calls rather than rolling your own).
 

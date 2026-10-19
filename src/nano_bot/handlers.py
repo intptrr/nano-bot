@@ -20,6 +20,7 @@ from .reports import (
     build_cashback_report,
     build_flight_report,
     build_market_section,
+    build_tennis_report,
 )
 from .services.bangumi import Season
 from .services.cashback import Quarter
@@ -44,6 +45,7 @@ HELP_TEXT = (
     "/douban [movies|books] — new and upcoming Douban movies, and monthly books\n"
     "/cashback — Chase and Discover 5% categories (this and next quarter)\n"
     "/flight — Alaska fare sales and Global Getaways right now\n"
+    "/tennis — adult tennis registration dates (Amy Yee, Sand Point)\n"
     "/help — list commands"
 )
 
@@ -200,6 +202,13 @@ def build_router(settings: Settings) -> Router:
     async def handle_flight(message: Message) -> None:
         await message.answer(
             await build_flight_report(),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+
+    @router.message(Command("tennis"))
+    async def handle_tennis(message: Message) -> None:
+        await message.answer(
+            await build_tennis_report(),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
 
