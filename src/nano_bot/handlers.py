@@ -13,7 +13,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import LinkPreviewOptions, Message
 
 from .config import Settings
-from .reports import build_cashback_report, build_market_section
+from .reports import build_cashback_report, build_flight_report, build_market_section
 from .services.anilist import AiringEpisode, fetch_airing_today, fetch_airing_week
 from .services.cashback import Quarter
 from .services.douban import DoubanItem, fetch_trending_books, fetch_trending_movies
@@ -33,6 +33,7 @@ HELP_TEXT = (
     "/anime [week] — highly-rated anime airing today (or this week)\n"
     "/douban [movies|books] — trending Douban movies and monthly books\n"
     "/cashback — Chase and Discover 5% categories (this and next quarter)\n"
+    "/flight — Alaska fare sales and Global Getaways right now\n"
     "/help — list commands"
 )
 
@@ -224,6 +225,13 @@ def build_router(settings: Settings) -> Router:
         current = Quarter.containing(datetime.now(ZoneInfo(settings.timezone)).date())
         await message.answer(
             await build_cashback_report([current, current.next()]),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+
+    @router.message(Command("flight"))
+    async def handle_flight(message: Message) -> None:
+        await message.answer(
+            await build_flight_report(),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
 

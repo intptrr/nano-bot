@@ -1,8 +1,9 @@
-"""Scheduled jobs (morning broadcast, quarterly cashback heads-up)."""
+"""Scheduled jobs (morning broadcast, cashback heads-up, Alaska promotion alerts)."""
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -13,6 +14,12 @@ from apscheduler.triggers.cron import CronTrigger
 
 from .config import Settings
 from .reports import build_cashback_report, build_morning_report
+from .services.alaska import (
+    IDLE,
+    PROMOTION_SOURCES,
+    PromotionSource,
+    promotion_status,
+)
 from .services.cashback import Quarter
 
 log = logging.getLogger(__name__)
@@ -46,6 +53,34 @@ async def broadcast_cashback(bot: Bot, settings: Settings) -> None:
         "cashback heads-up",
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
+
+
+@dataclass(slots=True)
+class PromotionWatch:
+    source: PromotionSource
+    last_state: str | None = None
+
+    async def poll(self) -> str | None:
+        status = await promotion_status(self.source)
+        if status.state is None or status.state == self.last_state:
+            return None
+        self.last_state = status.state
+        return None if status.state == IDLE else status.message
+
+
+async def check_alaska_promotions(
+    bot: Bot, settings: Settings, watches: list[PromotionWatch]
+) -> None:
+    for watch in watches:
+        text = await watch.poll()
+        if text:
+            await _send_to_chats(
+                bot,
+                settings,
+                text,
+                "Alaska promotion alert",
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
 
 
 def build_scheduler(bot: Bot, settings: Settings) -> AsyncIOScheduler:
@@ -83,6 +118,20 @@ def build_scheduler(bot: Bot, settings: Settings) -> AsyncIOScheduler:
     log.info(
         "Cashback heads-up scheduled on Mar/Jun/Sep/Dec 15 at %s %s",
         settings.notify_time,
+        settings.timezone,
+    )
+    scheduler.add_job(
+        check_alaska_promotions,
+        trigger=CronTrigger(
+            hour="7-21/2", minute=0, timezone=ZoneInfo(settings.timezone)
+        ),
+        args=[bot, settings, [PromotionWatch(source) for source in PROMOTION_SOURCES]],
+        id="alaska_promotions",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    log.info(
+        "Alaska promotion checks scheduled every 2 hours, 07:00-21:00 %s",
         settings.timezone,
     )
     return scheduler

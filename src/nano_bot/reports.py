@@ -1,4 +1,4 @@
-"""Compose the morning and cash back reports from individual services."""
+"""Compose the morning, cash back and flight reports from individual services."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .config import Settings
+from .services.alaska import PROMOTION_SOURCES, promotion_status
 from .services.cashback import (
     CHASE,
     DISCOVER,
@@ -134,3 +135,10 @@ async def build_cashback_report(quarters: list[Quarter]) -> str:
         for quarter in quarters
     ]
     return "\n\n".join(blocks)
+
+
+async def build_flight_report() -> str:
+    statuses = await asyncio.gather(
+        *(promotion_status(source) for source in PROMOTION_SOURCES)
+    )
+    return "\n\n".join(status.message for status in statuses)

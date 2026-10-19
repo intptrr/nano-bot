@@ -21,15 +21,19 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   slash-command menu in `BOT_COMMANDS` — keep it in sync with `handlers.py`.
 - `config.py` — frozen `Settings` dataclass + `load_settings()` (.env parser).
 - `handlers.py` — aiogram router: `/start`, `/help`, `/weather [city]`,
-  `/stock [TICKER ...]`, `/anime [week]`, `/douban [movies|books]`, `/cashback`.
-- `reports.py` — composes the morning broadcast and the cashback report from
-  services.
-- `scheduler.py` — APScheduler cron for the daily broadcast and the quarterly
-  cashback heads-up (15th of Mar/Jun/Sep/Dec).
+  `/stock [TICKER ...]`, `/anime [week]`, `/douban [movies|books]`, `/cashback`,
+  `/flight`.
+- `reports.py` — composes the morning broadcast, the cashback report and the
+  `/flight` report from services.
+- `scheduler.py` — APScheduler cron for the daily broadcast, the quarterly
+  cashback heads-up (15th of Mar/Jun/Sep/Dec) and Alaska promotion checks
+  (every 2 hours, 07:00–21:00; alert state is in memory only).
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
   `services/anilist.py` (AniList), `services/douban.py` (Douban),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),
+  `services/alaska.py` (Alaska fare sale + Global Getaways pages; parsed
+  best-effort, unknown layouts raise `UnrecognizedPageError`),
   `services/_retry.py` (shared sync/async exponential-backoff retry helpers —
   reuse these for new external calls rather than rolling your own).
 

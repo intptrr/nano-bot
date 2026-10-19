@@ -10,6 +10,7 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 - **Anime** (`/anime [week]`) — highly-rated anime airing today (or this week, grouped by day) from [AniList](https://anilist.co/), ranked by a popularity- and favourites-weighted score.
 - **Douban** (`/douban [movies|books]`) — trending Chinese-community picks from [Douban](https://m.douban.com/): now-showing movies and this month's hot books, each with its 10-point rating and rating count.
 - **Cash back** (`/cashback`) — Chase Freedom Flex and Discover it 5% rotating categories for this and next quarter. A heads-up with next quarter's categories goes out on the 15th of Mar/Jun/Sep/Dec.
+- **Alaska promotions** (`/flight`) — an alert when Alaska Airlines starts a fare sale or an Atmos Rewards Global Getaways award sale, and a command to check both anytime.
 
 ## Layout
 
@@ -17,15 +18,16 @@ A personal assistant Telegram bot. Built on [aiogram](https://docs.aiogram.dev/)
 src/nano_bot/
   app.py           # entry point: wires bot, dispatcher, scheduler
   config.py        # Settings dataclass + .env loader
-  handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime, /douban, /cashback)
-  reports.py       # composes morning and cash back reports from services
-  scheduler.py     # APScheduler cron jobs (morning broadcast, cash back heads-up)
+  handlers.py      # aiogram Router (/start, /help, /weather, /stock, /anime, /douban, /cashback, /flight)
+  reports.py       # composes morning, cash back and flight reports from services
+  scheduler.py     # APScheduler cron jobs (morning broadcast, cash back heads-up, Alaska alerts)
   services/
     weather.py     # Open-Meteo client (geocoding + forecast)
     stock.py       # yfinance client
     anilist.py     # AniList client (airing schedule + weighted rating)
     douban.py      # Douban client (trending movies + monthly books)
     cashback.py    # Chase + Discover 5% category calendars
+    alaska.py      # Alaska fare sale + Global Getaways pages
     _retry.py      # shared sync/async exponential-backoff retry helpers
 ```
 
@@ -114,6 +116,7 @@ To rotate any value in `.env`, update the `ENV_FILE` secret and re-run the workf
 - `/anime [week]` — highly-rated anime airing today; pass `week` to list the next 7 days grouped by day. Sourced from [AniList](https://anilist.co/); each title shows a popularity- and favourites-weighted score
 - `/douban [movies|books]` — trending [Douban](https://m.douban.com/) now-showing movies and this month's hot books with their 10-point rating and rating count; pass `movies` or `books` to show just one section (content is zh-CN)
 - `/cashback` — Chase Freedom Flex and Discover it 5% categories for this and next quarter
+- `/flight` — whether an Alaska fare sale or Global Getaways is running right now, with links to both pages
 
 ## Configuration
 
@@ -145,3 +148,12 @@ On the 15th of March, June, September and December at `NOTIFY_TIME` (local `TIME
 - Discover it categories come from the JSON feed behind its [5% calendar](https://www.discover.com/credit-cards/cash-back/cashback-calendar.html).
 
 Neither source is a documented API. If one fails or changes shape, that card shows a link instead and the error is logged.
+
+## Alaska promotions
+
+Every 2 hours from 07:00 to 21:00 (local `TIMEZONE`), the bot checks two of Alaska Airlines' own pages and sends a separate alert to every chat id in `CHAT_IDS` when something new starts:
+
+- **Fare sales** from the [sale page](https://www.alaskaair.com/content/deals/flights/sale): the sale's description, end date and a link to the page.
+- **Global Getaways** from the [Global Getaways page](https://www.alaskaair.com/content/global-getaways): discounted award flights released on Atmos Members Day (usually the first Wednesday of the month), with the book-by date, travel window, each destination's starting points and a link to the page.
+
+Each promotion is announced once; the next one alerts again after it ends. What has been sent is only kept in memory, so a promotion still running after a restart or deploy is announced again. If a page loads but no longer matches its known layouts, a one-time "page changed" alert links to it instead. `/flight` shows the current state of both pages on demand without affecting the alerts.
