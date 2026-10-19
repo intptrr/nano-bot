@@ -19,8 +19,9 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
 
 - `app.py` — entry point; wires bot, dispatcher, scheduler. Registers Telegram
   slash-command menu in `BOT_COMMANDS` — keep it in sync with `handlers.py`.
-  It is registered for the default scope and for each `CHAT_IDS` chat, because
-  chat-scoped lists outrank anything set in @BotFather.
+  It is registered for the default, all-private-chats and all-group-chats
+  scopes, which outrank a language-specific default list such as one set in
+  @BotFather.
 - `config.py` — frozen `Settings` dataclass + `load_settings()` (.env parser).
 - `handlers.py` — aiogram router: `/start`, `/help`, `/weather [city]`,
   `/stock [TICKER ...]`, `/anime [week]`, `/douban [movies|books]`, `/cashback`,
