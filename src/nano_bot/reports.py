@@ -238,10 +238,9 @@ def _tennis_line(verb: str, opening: Opening) -> str:
 
 def _tennis_center_block(status: CenterStatus, now: datetime) -> str:
     center = status.center
-    title = _tennis_link(center.register_url, center.name)
+    title = _tennis_link(center.page_url, center.name)
     if status.problem:
-        check = _tennis_link(center.page_url, "Check the page")
-        return f"{title}\nCouldn't read the schedule right now. {check}"
+        return f"{title}\nCouldn't read the schedule right now."
     opened = [opening for opening in status.openings if opening.opens_at <= now]
     current = [
         opening

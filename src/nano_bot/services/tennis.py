@@ -83,7 +83,6 @@ class Opening:
 class Center:
     name: str
     page_url: str
-    register_url: str
     parse: Callable[[BeautifulSoup, date], list[tuple[str, datetime]]]
 
 
@@ -214,19 +213,13 @@ def _parse_sand_point(soup: BeautifulSoup, today: date) -> list[tuple[str, datet
 
 AMY_YEE = Center(
     name="Amy Yee Tennis Center",
-    page_url="https://www.seattle.gov/parks/sports/tennis",
-    register_url=(
-        "https://anc.apm.activecommunities.com/seattle/activity/search"
-        "?onlineSiteId=0&activity_select_param=2&center_ids=2&site_ids=3"
-        "&activity_keyword=18%2B&viewMode=list"
-    ),
+    page_url="https://www.seattle.gov/parks/sports/tennis#adult",
     parse=_parse_amy_yee,
 )
 
 SAND_POINT = Center(
     name="Tennis Center Sand Point",
     page_url="https://tenniscentersandpoint.com/classes-programs/adults/",
-    register_url="https://tcsp.clubautomation.com/",
     parse=_parse_sand_point,
 )
 
@@ -245,7 +238,7 @@ async def center_status(center: Center, today: date) -> CenterStatus:
         return CenterStatus(center, problem=UNREACHABLE)
     openings = sorted(
         (
-            Opening(center.name, term, opens_at, center.register_url)
+            Opening(center.name, term, opens_at, center.page_url)
             for term, opens_at in found
         ),
         key=lambda opening: opening.opens_at,
