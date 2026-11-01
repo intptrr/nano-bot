@@ -13,6 +13,7 @@ A personal assistant Telegram bot built on [aiogram](https://docs.aiogram.dev/) 
 | `/cashback` | Chase Freedom Flex and Discover it 5% categories for this and next quarter |
 | `/flight` | Current Alaska Airlines fare sale and Global Getaways |
 | `/tennis` | Current and upcoming tennis registration at Amy Yee and Sand Point |
+| `/event` | Beyond Wonderland at The Gorge passes with their lowest prices, and Coachella festival pass status |
 | `/start`, `/help` | Show your chat id; list commands |
 
 ## Notifications
@@ -26,6 +27,8 @@ Sent to every chat in `CHAT_IDS`, at `NOTIFY_TIME` in `TIMEZONE` unless noted:
 | 21st of Jan/Apr/Jul/Oct | Highly rated Japanese anime airing this season |
 | Every 2 hours, 07:00–21:00 | Alert when an Alaska fare sale or Global Getaways starts |
 | Day before and when tennis registration opens | Heads-up, then an alert |
+| Every 15 minutes | Alert when new [Beyond Wonderland at The Gorge](https://pnw.beyondwonderland.com/) passes go on sale |
+| Every 15 minutes | Alert when [Coachella](https://www.coachella.com/passes) festival passes open for registration or go on sale |
 
 ## Layout
 
@@ -44,6 +47,8 @@ src/nano_bot/
     cashback.py    # Chase + Discover 5% calendars
     alaska.py      # Alaska fare sales + Global Getaways
     tennis.py      # Amy Yee + Sand Point tennis registration
+    wonderland.py  # Beyond Wonderland at The Gorge passes
+    coachella.py   # Coachella festival pass registration + sales
     _retry.py      # shared retry helpers
 ```
 

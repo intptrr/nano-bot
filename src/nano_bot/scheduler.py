@@ -1,5 +1,5 @@
 """Scheduled jobs (morning broadcast, cashback heads-up, Alaska alerts, anime season,
-tennis registration)."""
+tennis registration, festival passes)."""
 
 from __future__ import annotations
 
@@ -18,10 +18,14 @@ from .config import Settings
 from .reports import (
     build_anime_season_report,
     build_cashback_report,
+    build_coachella_alert,
+    build_coachella_warning,
     build_morning_report,
     build_tennis_alert,
     build_tennis_heads_up,
     build_tennis_warning,
+    build_wonderland_alert,
+    build_wonderland_warning,
 )
 from .services.alaska import (
     IDLE,
@@ -31,7 +35,11 @@ from .services.alaska import (
 )
 from .services.bangumi import Season
 from .services.cashback import Quarter
+from .services.coachella import UNRECOGNIZED as PASSES_UNRECOGNIZED
+from .services.coachella import PassButton, passes_status
 from .services.tennis import PACIFIC, CenterStatus, Opening, check_centers
+from .services.wonderland import UNRECOGNIZED as STORE_UNRECOGNIZED
+from .services.wonderland import Pass, store_status
 
 log = logging.getLogger(__name__)
 
@@ -201,6 +209,76 @@ async def tennis_heads_up(
     )
 
 
+@dataclass(slots=True)
+class WonderlandWatch:
+    seen: set[str] | None = None
+    warned: bool = False
+
+    def new_passes(self, passes: tuple[Pass, ...]) -> list[Pass]:
+        keys = {item.key for item in passes}
+        if self.seen is None:
+            self.seen = keys
+            return []
+        new = [item for item in passes if item.key not in self.seen]
+        self.seen |= keys
+        return new
+
+    async def poll(self) -> str | None:
+        status = await store_status()
+        if status.problem == STORE_UNRECOGNIZED:
+            if self.warned:
+                return None
+            self.warned = True
+            return build_wonderland_warning()
+        if status.problem:
+            return None
+        self.warned = False
+        new = self.new_passes(status.passes)
+        return build_wonderland_alert(new, datetime.now(PACIFIC)) if new else None
+
+
+@dataclass(slots=True)
+class CoachellaWatch:
+    open_keys: set[str] | None = None
+    warned: bool = False
+
+    def newly_open(self, buttons: tuple[PassButton, ...]) -> list[PassButton]:
+        opened = [button for button in buttons if button.open]
+        keys = {button.key for button in opened}
+        previous, self.open_keys = self.open_keys, keys
+        if previous is None:
+            return []
+        return [button for button in opened if button.key not in previous]
+
+    async def poll(self) -> str | None:
+        status = await passes_status()
+        if status.problem == PASSES_UNRECOGNIZED:
+            if self.warned:
+                return None
+            self.warned = True
+            return build_coachella_warning()
+        if status.problem:
+            return None
+        self.warned = False
+        new = self.newly_open(status.buttons)
+        return build_coachella_alert(new, status.notes) if new else None
+
+
+async def check_festival_passes(
+    bot: Bot, settings: Settings, watches: list[WonderlandWatch | CoachellaWatch]
+) -> None:
+    for watch in watches:
+        text = await watch.poll()
+        if text:
+            await _send_to_chats(
+                bot,
+                settings,
+                text,
+                "festival pass alert",
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
+
+
 def build_scheduler(bot: Bot, settings: Settings) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     trigger = CronTrigger(
@@ -297,5 +375,18 @@ def build_scheduler(bot: Bot, settings: Settings) -> AsyncIOScheduler:
         "at 00:05 Pacific and on startup",
         settings.notify_time,
         settings.timezone,
+    )
+    scheduler.add_job(
+        check_festival_passes,
+        trigger=CronTrigger(minute="1-59/15", timezone=PACIFIC),
+        args=[bot, settings, [WonderlandWatch(), CoachellaWatch()]],
+        id="festival_passes",
+        replace_existing=True,
+        misfire_grace_time=600,
+        next_run_time=datetime.now(PACIFIC),
+    )
+    log.info(
+        "Beyond Wonderland and Coachella pass checks scheduled every 15 minutes "
+        "from :01 Pacific and on startup"
     )
     return scheduler

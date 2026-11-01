@@ -25,9 +25,10 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
 - `config.py` — frozen `Settings` dataclass + `load_settings()` (.env parser).
 - `handlers.py` — aiogram router: `/start`, `/help`, `/weather [city]`,
   `/stock [TICKER ...]`, `/anime [week|season]`, `/douban [movies|books]`,
-  `/cashback`, `/flight`, `/tennis`.
+  `/cashback`, `/flight`, `/tennis`, `/event`.
 - `reports.py` — composes the morning broadcast, the cashback report, the
-  `/flight` report, the anime lists and the tennis registration messages from
+  `/flight` report, the anime lists, the tennis registration messages, the
+  `/event` report and the Beyond Wonderland and Coachella alerts from
   services.
 - `scheduler.py` — APScheduler cron for the daily broadcast, the quarterly
   cashback heads-up (15th of Mar/Jun/Sep/Dec), Alaska promotion checks
@@ -36,7 +37,14 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   heads-up at `NOTIFY_TIME` the day before (which also warns once per center
   when its page can't be read) and an alert at each opening time. Alerts are
   one-off jobs held in memory, so they are scheduled at heads-up time and
-  re-planned at 00:05 Pacific and on startup.
+  re-planned at 00:05 Pacific and on startup. Beyond Wonderland at The Gorge
+  and Coachella passes are checked together every 15 minutes from :01 Pacific
+  and on startup, with state in memory only: the first check after startup is
+  the baseline, and an unreadable page warns once until it reads again. Beyond
+  Wonderland alerts on passes or on-sale times not seen since startup;
+  Coachella alerts whenever a festival pass gains a Register, Purchase or Buy
+  button it lacked at the previous check, so a sold-out pass that reopens
+  alerts again.
 - `services/weather.py` (Open-Meteo), `services/stock.py` (yfinance),
   `services/bangumi.py` (Bangumi calendar + seasons, Chinese names; Japanese
   anime only via the `日本` meta tag, which calendar shows need a per-show
@@ -59,6 +67,17 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   ActiveNet has shown; Tennis Center Sand Point's session table on its Adults
   page, `Standard Annual` row and both adult columns, dates without a year
   placed in the year nearest today; unknown layouts raise
+  `UnrecognizedPageError`),
+  `services/wonderland.py` (Beyond Wonderland at The Gorge passes on the Front
+  Gate storefront: each listing's name and link plus its on-sale date and time,
+  which are Pacific data attributes; the "no items on sale" notice means
+  nothing is listed; unknown layouts raise `UnrecognizedPageError`; a pass's
+  lowest price is the smallest `data-price`, fees included, on its own page),
+  `services/coachella.py` (Coachella's hand-edited passes page, read by
+  shape: every button between the `Festival Passes` h2 and the next h2, each
+  under the latest h3/h4 pass name, skipping blank and one-letter links;
+  Register, Purchase and Buy count as open, and lines with a Pacific time are
+  kept as sale notes; a page without the section raises
   `UnrecognizedPageError`),
   `services/_retry.py` (shared sync/async exponential-backoff retry helpers —
   reuse these for new external calls rather than rolling your own).

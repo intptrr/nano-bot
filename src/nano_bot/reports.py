@@ -1,11 +1,12 @@
-"""Compose the morning, cash back, flight, anime and tennis reports from services."""
+"""Compose the morning, cash back, flight, anime, tennis and event reports and
+the Beyond Wonderland and Coachella alerts from services."""
 
 from __future__ import annotations
 
 import asyncio
 import html
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -21,6 +22,7 @@ from .services.cashback import (
     fetch_chase_calendar,
     fetch_discover_calendar,
 )
+from .services.coachella import PASSES_URL, PassButton, PassesStatus, passes_status
 from .services.stock import fetch_quotes, format_report
 from .services.tennis import (
     PACIFIC,
@@ -30,6 +32,14 @@ from .services.tennis import (
     check_centers,
 )
 from .services.weather import fetch_daily_forecast
+from .services.wonderland import (
+    SITE_URL,
+    STORE_URL,
+    Pass,
+    StoreStatus,
+    lowest_price,
+    store_status,
+)
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +47,8 @@ MAX_MESSAGE_LEN = 4096
 
 _AIRING_TODAY = "\U0001f4fa <b>Airing today</b>"
 _AIRING_THIS_WEEK = "\U0001f4fa <b>Airing this week</b>"
+_WONDERLAND = "\U0001f39f\ufe0f <b>Beyond Wonderland at The Gorge</b>"
+_COACHELLA = "\U0001f3a1 <b>Coachella</b>"
 
 # Process-wide counters for observability. Reset on process restart.
 _metrics: dict[str, int] = {
@@ -221,7 +233,7 @@ async def build_anime_season_report(season: Season) -> str:
     )
 
 
-def _tennis_link(url: str, text: str) -> str:
+def _link(url: str, text: str) -> str:
     return f'<a href="{html.escape(url)}">{html.escape(text)}</a>'
 
 
@@ -238,7 +250,7 @@ def _tennis_line(verb: str, opening: Opening) -> str:
 
 def _tennis_center_block(status: CenterStatus, now: datetime) -> str:
     center = status.center
-    title = _tennis_link(center.page_url, center.name)
+    title = _link(center.page_url, center.name)
     if status.problem:
         return f"{title}\nCouldn't read the schedule right now."
     opened = [opening for opening in status.openings if opening.opens_at <= now]
@@ -270,7 +282,7 @@ async def build_tennis_report() -> str:
 def build_tennis_heads_up(openings: list[Opening]) -> str:
     lines = ["\U0001f3be <b>Tennis registration opens tomorrow</b>"]
     lines.extend(
-        f"{_clock(opening.opens_at)} \u00b7 {_tennis_link(opening.url, opening.center)}"
+        f"{_clock(opening.opens_at)} \u00b7 {_link(opening.url, opening.center)}"
         f" \u00b7 {html.escape(opening.term)}"
         for opening in sorted(openings, key=lambda opening: opening.opens_at)
     )
@@ -280,7 +292,7 @@ def build_tennis_heads_up(openings: list[Opening]) -> str:
 def build_tennis_alert(opening: Opening) -> str:
     return (
         "\U0001f3be <b>Tennis registration is open</b>\n"
-        f"{_tennis_link(opening.url, opening.center)} \u00b7 "
+        f"{_link(opening.url, opening.center)} \u00b7 "
         f"{html.escape(opening.term)}"
     )
 
@@ -297,4 +309,128 @@ def build_tennis_warning(status: CenterStatus) -> str:
             "trying; check the page in the meantime."
         )
     center = status.center
-    return f"\u26a0\ufe0f {_tennis_link(center.page_url, center.name)}\n{detail}"
+    return f"\u26a0\ufe0f {_link(center.page_url, center.name)}\n{detail}"
+
+
+def _wonderland_line(item: Pass, now: datetime, price: float | None = None) -> str:
+    line = f"\u2022 {_link(item.url, item.label)}"
+    if price is not None:
+        line += f" \u00b7 from ${price:,.2f}"
+    if item.on_sale > now:
+        line += f" \u00b7 opens {item.on_sale:%a %b %-d} {_clock(item.on_sale)}"
+    return line
+
+
+def build_wonderland_alert(passes: list[Pass], now: datetime) -> str:
+    lines = [_WONDERLAND, "New passes on sale:"]
+    lines.extend(_wonderland_line(item, now) for item in passes)
+    lines.append(_link(SITE_URL, SITE_URL))
+    return "\n".join(lines)
+
+
+def build_wonderland_warning() -> str:
+    return (
+        f"\u26a0\ufe0f {_link(STORE_URL, 'Beyond Wonderland at The Gorge')}\n"
+        "The ticket page changed and couldn't be read, so new pass alerts are "
+        "paused. Check the page for new passes."
+    )
+
+
+def _by_pass(buttons: Iterable[PassButton]) -> dict[str, list[PassButton]]:
+    passes: dict[str, list[PassButton]] = {}
+    for button in buttons:
+        passes.setdefault(button.name, []).append(button)
+    return passes
+
+
+def _coachella_lines(buttons: list[PassButton]) -> list[str]:
+    return [
+        f"\u2022 {html.escape(name)} \u00b7 "
+        + ", ".join(
+            _link(button.url, button.weekend or button.label) for button in group
+        )
+        for name, group in _by_pass(buttons).items()
+    ]
+
+
+def build_coachella_alert(buttons: list[PassButton], notes: tuple[str, ...]) -> str:
+    lines = [_COACHELLA]
+    sections = (
+        ("Passes on sale:", [button for button in buttons if not button.registration]),
+        ("Registration open:", [button for button in buttons if button.registration]),
+    )
+    for title, group in sections:
+        if group:
+            lines.append(title)
+            lines.extend(_coachella_lines(group))
+    lines.extend(html.escape(note) for note in notes)
+    lines.append(_link(PASSES_URL, PASSES_URL))
+    return "\n".join(lines)
+
+
+def build_coachella_warning() -> str:
+    return (
+        f"\u26a0\ufe0f {_link(PASSES_URL, 'Coachella passes')}\n"
+        "The passes page changed and couldn't be read, so Coachella pass alerts "
+        "are paused. Check the page for new sales."
+    )
+
+
+def _wonderland_block(
+    status: StoreStatus, prices: list[float | None], now: datetime
+) -> str:
+    if status.problem:
+        detail = [f"Couldn't read {_link(STORE_URL, 'the ticket page')} right now."]
+    elif not status.passes:
+        detail = [f"No passes on sale right now. {_link(STORE_URL, 'Ticket page')}"]
+    else:
+        detail = [
+            _wonderland_line(item, now, price)
+            for item, price in zip(status.passes, prices, strict=True)
+        ]
+    return "\n".join([_WONDERLAND, *detail, _link(SITE_URL, SITE_URL)])
+
+
+def _coachella_action(action: str, buttons: list[PassButton]) -> str:
+    weekends = [
+        _link(button.url, button.weekend) for button in buttons if button.weekend
+    ]
+    if not weekends:
+        return _link(buttons[0].url, action)
+    return f"{html.escape(action)} {', '.join(weekends)}"
+
+
+def _coachella_states(buttons: list[PassButton]) -> str:
+    actions: dict[str, list[PassButton]] = {}
+    for button in buttons:
+        actions.setdefault(button.action, []).append(button)
+    return " \u00b7 ".join(
+        _coachella_action(action, group) for action, group in actions.items()
+    )
+
+
+def _coachella_block(status: PassesStatus) -> str:
+    if status.problem:
+        detail = ["Couldn't read the passes page right now."]
+    elif not status.buttons:
+        detail = ["No passes listed right now."]
+    else:
+        detail = [
+            f"\u2022 {html.escape(name)} \u00b7 {_coachella_states(group)}"
+            for name, group in _by_pass(status.buttons).items()
+        ]
+        detail.extend(html.escape(note) for note in status.notes)
+    return "\n".join([_COACHELLA, *detail, _link(PASSES_URL, PASSES_URL)])
+
+
+async def _wonderland_section(now: datetime) -> str:
+    status = await store_status()
+    prices = await asyncio.gather(*(lowest_price(item) for item in status.passes))
+    return _wonderland_block(status, prices, now)
+
+
+async def build_event_report() -> str:
+    wonderland, coachella = await asyncio.gather(
+        _wonderland_section(datetime.now(PACIFIC)), passes_status()
+    )
+    return "\n\n".join([wonderland, _coachella_block(coachella)])

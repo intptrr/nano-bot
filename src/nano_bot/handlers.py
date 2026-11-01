@@ -18,6 +18,7 @@ from .reports import (
     build_anime_today_report,
     build_anime_week_report,
     build_cashback_report,
+    build_event_report,
     build_flight_report,
     build_market_section,
     build_tennis_report,
@@ -46,6 +47,7 @@ HELP_TEXT = (
     "/cashback — Chase and Discover 5% categories (this and next quarter)\n"
     "/flight — Alaska fare sales and Global Getaways right now\n"
     "/tennis — adult tennis registration dates (Amy Yee, Sand Point)\n"
+    "/event — Beyond Wonderland and Coachella passes right now\n"
     "/help — list commands"
 )
 
@@ -209,6 +211,13 @@ def build_router(settings: Settings) -> Router:
     async def handle_tennis(message: Message) -> None:
         await message.answer(
             await build_tennis_report(),
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+
+    @router.message(Command("event"))
+    async def handle_event(message: Message) -> None:
+        await message.answer(
+            await build_event_report(),
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
 

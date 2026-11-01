@@ -30,6 +30,7 @@ BOT_COMMANDS: list[BotCommand] = [
     BotCommand(command="cashback", description="Chase & Discover 5% categories"),
     BotCommand(command="flight", description="Alaska fare sales & Global Getaways"),
     BotCommand(command="tennis", description="Tennis registration dates"),
+    BotCommand(command="event", description="Beyond Wonderland & Coachella passes"),
     BotCommand(command="help", description="List commands"),
 ]
 
