@@ -1,17 +1,21 @@
 """Alaska Airlines promotions: fare sales and Atmos Rewards Global Getaways.
 
 Both are read from Alaska's public pages rather than a documented API, so the
-markup may change without notice. A page that loads but matches neither the
-live nor the idle layout raises UnrecognizedPageError.
+markup may change without notice. The pages are Next.js apps that render most
+of their content from the __NEXT_DATA__ JSON, so its strings are read along
+with the visible HTML, whose fallback idle message can show while a promotion
+is live. A page that mentions a promotion it can't parse, or matches neither
+the live nor the idle layout, raises UnrecognizedPageError.
 """
 
 from __future__ import annotations
 
 import asyncio
 import html
+import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -42,14 +46,18 @@ _HEADERS = {
 _DATE = r"[A-Z][a-z]{2,8}\.? \d{1,2}, \d{4}"
 _SALE_ENDS = re.compile(rf"Sale ends ({_DATE})")
 _SALE_OVER = re.compile(r"sale you.re looking for has ended", re.IGNORECASE)
+_SALE_HINT = re.compile(r"Sale ends|Book by", re.IGNORECASE)
 _BOOK_BY = re.compile(rf"Book by ({_DATE})")
 _TRAVEL = re.compile(
-    rf"travel between ({_DATE}),? (?:to|and|through|-|\u2013) ({_DATE})"
+    rf"travel (?:between )?({_DATE}),?\s*(?:to|and|through|-|\u2013)\s*({_DATE})"
 )
 _POINTS = re.compile(r"(?:starting at |from )?([\d,]+) points", re.IGNORECASE)
+_CARD_POINTS = re.compile(r"\bfrom ([\d,]+) points", re.IGNORECASE)
+_AIRPORT_CODE = re.compile(r"\s*\([A-Z]{3}\)\s*$")
 _GETAWAYS_OVER = re.compile(
     r"More Global Getaways await|More deals are landing soon", re.IGNORECASE
 )
+_GETAWAYS_HINT = re.compile(r"Book by|from [\d,]+ points", re.IGNORECASE)
 _POINTS_LABELS = frozenset({"starting at", "from"})
 
 
@@ -171,17 +179,56 @@ async def _fetch_text(url: str, description: str) -> str:
         )
 
 
-def _visible_text(page: str) -> tuple[str, list[str]]:
+@dataclass(slots=True, frozen=True)
+class _Page:
+    title: str
+    visible: list[str]
+    data: object
+
+    @property
+    def strings(self) -> list[str]:
+        return [*self.visible, *_json_strings(self.data)]
+
+
+def _json_strings(node: object) -> Iterator[str]:
+    if isinstance(node, str):
+        text = BeautifulSoup(node, "html.parser").get_text(" ") if "<" in node else node
+        text = " ".join(text.split())
+        if text:
+            yield text
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _json_strings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _json_strings(value)
+
+
+def _next_data(soup: BeautifulSoup) -> object:
+    script = soup.find("script", id="__NEXT_DATA__")
+    if script is None:
+        return None
+    try:
+        return json.loads(script.string or "")
+    except ValueError as exc:
+        raise UnrecognizedPageError("Unreadable __NEXT_DATA__") from exc
+
+
+def _read_page(page: str) -> _Page:
     soup = BeautifulSoup(page, "html.parser")
     title = soup.title.get_text(strip=True) if soup.title else ""
+    data = _next_data(soup)
     for hidden in soup(["script", "style", "noscript", "template"]):
         hidden.decompose()
-    return title, [" ".join(text.split()) for text in soup.stripped_strings]
+    return _Page(
+        title, [" ".join(text.split()) for text in soup.stripped_strings], data
+    )
 
 
-def _parse_fare_sale(title: str, strings: list[str]) -> FareSale | None:
-    if "Alaska" not in title:
-        raise UnexpectedPageError(f"Unexpected fare sale page title {title!r}")
+def _parse_fare_sale(page: _Page) -> FareSale | None:
+    if "Alaska" not in page.title:
+        raise UnexpectedPageError(f"Unexpected fare sale page title {page.title!r}")
+    strings = page.strings
     for text in strings:
         ends = _SALE_ENDS.search(text)
         if ends:
@@ -189,13 +236,15 @@ def _parse_fare_sale(title: str, strings: list[str]) -> FareSale | None:
                 summary=text[: ends.start()].strip(),
                 ends=_parse_date(ends.group(1)),
             )
-    if any(_SALE_OVER.search(text) for text in strings):
+    text = " ".join(strings)
+    if _SALE_HINT.search(text):
+        raise UnrecognizedPageError("Fare sale page mentions a sale it can't read")
+    if _SALE_OVER.search(text):
         return None
     raise UnrecognizedPageError("Fare sale page shows neither a live nor an ended sale")
 
 
-def _parse_destinations(strings: list[str]) -> tuple[Destination, ...]:
-    destinations: dict[str, Destination] = {}
+def _listed_destinations(strings: list[str]) -> Iterator[Destination]:
     for index, text in enumerate(strings):
         points = _POINTS.fullmatch(text)
         if not points or index == 0:
@@ -204,10 +253,36 @@ def _parse_destinations(strings: list[str]) -> tuple[Destination, ...]:
         if strings[name_index].lower() in _POINTS_LABELS and name_index > 0:
             name_index -= 1
         name = strings[name_index].split(",")[0].strip()
-        destinations.setdefault(
-            name, Destination(name=name, points=int(points.group(1).replace(",", "")))
-        )
-    return tuple(destinations.values())
+        yield Destination(name=name, points=int(points.group(1).replace(",", "")))
+
+
+def _headline(node: object) -> str:
+    if isinstance(node, dict):
+        node = node.get("large") or node.get("small")
+    return node if isinstance(node, str) else ""
+
+
+def _card_destinations(node: object) -> Iterator[Destination]:
+    if isinstance(node, list):
+        for value in node:
+            yield from _card_destinations(value)
+    elif isinstance(node, dict):
+        points = _CARD_POINTS.search(" ".join(_json_strings(node.get("description"))))
+        name = _AIRPORT_CODE.sub("", _headline(node.get("headline")))
+        if points and name:
+            yield Destination(
+                name=name.split(",")[0].strip(),
+                points=int(points.group(1).replace(",", "")),
+            )
+        for value in node.values():
+            yield from _card_destinations(value)
+
+
+def _unique(destinations: Iterable[Destination]) -> tuple[Destination, ...]:
+    found: dict[str, Destination] = {}
+    for destination in destinations:
+        found.setdefault(destination.name, destination)
+    return tuple(found.values())
 
 
 def _parse_travel_window(text: str) -> tuple[date, date] | None:
@@ -218,11 +293,15 @@ def _parse_travel_window(text: str) -> tuple[date, date] | None:
     return _parse_date(start), _parse_date(end)
 
 
-def _parse_global_getaways(title: str, strings: list[str]) -> GlobalGetaways | None:
-    if "Global Getaways" not in title:
-        raise UnexpectedPageError(f"Unexpected Global Getaways page title {title!r}")
-    text = " ".join(strings)
-    destinations = _parse_destinations(strings)
+def _parse_global_getaways(page: _Page) -> GlobalGetaways | None:
+    if "Global Getaways" not in page.title:
+        raise UnexpectedPageError(
+            f"Unexpected Global Getaways page title {page.title!r}"
+        )
+    text = " ".join(page.strings)
+    destinations = _unique(_card_destinations(page.data)) or _unique(
+        _listed_destinations(page.visible)
+    )
     book_by = _BOOK_BY.search(text)
     if destinations or book_by:
         return GlobalGetaways(
@@ -230,6 +309,8 @@ def _parse_global_getaways(title: str, strings: list[str]) -> GlobalGetaways | N
             book_by=_parse_date(book_by.group(1)) if book_by else None,
             travel=_parse_travel_window(text),
         )
+    if _GETAWAYS_HINT.search(text):
+        raise UnrecognizedPageError("Global Getaways page mentions deals it can't read")
     if _GETAWAYS_OVER.search(text):
         return None
     raise UnrecognizedPageError(
@@ -239,12 +320,12 @@ def _parse_global_getaways(title: str, strings: list[str]) -> GlobalGetaways | N
 
 async def fetch_fare_sale() -> FareSale | None:
     page = await _fetch_text(FARE_SALE_URL, "Alaska fare sale page")
-    return _parse_fare_sale(*_visible_text(page))
+    return _parse_fare_sale(_read_page(page))
 
 
 async def fetch_global_getaways() -> GlobalGetaways | None:
     page = await _fetch_text(GLOBAL_GETAWAYS_URL, "Alaska Global Getaways page")
-    return _parse_global_getaways(*_visible_text(page))
+    return _parse_global_getaways(_read_page(page))
 
 
 @dataclass(slots=True, frozen=True)

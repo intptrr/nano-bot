@@ -60,8 +60,11 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   that starts each card subtitle),
   `services/cashback.py` (Chase Freedom Flex page + Discover calendar JSON;
   both undocumented, parsed best-effort),
-  `services/alaska.py` (Alaska fare sale + Global Getaways pages; parsed
-  best-effort, unknown layouts raise `UnrecognizedPageError`),
+  `services/alaska.py` (Alaska fare sale + Global Getaways pages, Next.js apps
+  read from their `__NEXT_DATA__` JSON as well as the visible HTML, whose
+  fallback idle message can show while a promotion is live; parsed
+  best-effort, and deal wording it can't parse or an unknown layout raises
+  `UnrecognizedPageError` instead of reading as idle),
   `services/tennis.py` (adult tennis registration: Amy Yee Tennis Center's
   dates from the Seattle Parks tennis page, opening at noon Pacific as
   ActiveNet has shown; Tennis Center Sand Point's session table on its Adults
