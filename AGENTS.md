@@ -97,3 +97,8 @@ does not run lint, typecheck, or tests.
   The job fails, printing the container's last log lines, if it isn't running
   without restarts 20 s later.
   Prod `.env` lives in the `ENV_FILE` GitHub environment secret, not the repo.
+- The Dockerfile's builder (`ghcr.io/astral-sh/uv:python3.X-bookworm-slim`) and
+  runtime (`python:3.X-slim-bookworm`) must use the same Python version: the
+  virtualenv is built in one and copied into the other. Dependabot ignores
+  Python minor/major bumps for that reason, so upgrade both stages together and
+  check every dependency supports the new version.
