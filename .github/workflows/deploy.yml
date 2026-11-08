@@ -95,6 +95,12 @@ jobs:
               "${IMAGE}:latest"
             docker image prune -f
             docker logout ghcr.io
+            sleep 20
+            if [ "$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' nano-bot)" != "true 0" ]; then
+              docker logs --tail 50 nano-bot >&2
+              echo "nano-bot is not running steadily 20s after deploy." >&2
+              exit 1
+            fi
         env:
           IMAGE: ${{ env.IMAGE }}
           GHCR_USER: ${{ github.repository_owner }}

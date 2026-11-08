@@ -10,8 +10,9 @@ Personal-assistant Telegram bot (aiogram v3, async). Long-polling only; no inbou
   formatter/linter but is **not** configured in `pyproject.toml` and **not**
   enforced in CI; run it manually before committing.
 
-There is **no test suite**. CI (`.github/workflows/ci.yml`) only builds the
-Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
+There is **no test suite**. CI (`.github/workflows/ci.yml`) builds the Docker
+image on PRs to `main` and imports `nano_bot.app` inside it as a smoke test; it
+does not run lint, typecheck, or tests.
 
 ## Layout
 
@@ -93,4 +94,6 @@ Docker image on PRs to `main`; it does not run lint, typecheck, or tests.
   defaults (see `config.py`).
 - Deploy is automatic on push to `main` (`.github/workflows/deploy.yml`):
   builds + pushes to GHCR, then SSHes to an Azure VM and restarts the container.
+  The job fails, printing the container's last log lines, if it isn't running
+  without restarts 20 s later.
   Prod `.env` lives in the `ENV_FILE` GitHub environment secret, not the repo.

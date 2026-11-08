@@ -78,7 +78,7 @@ Or in Docker: `docker compose up -d --build`.
 
 ## Deployment
 
-Every push to `main` builds an image, pushes it to GHCR and restarts the container on an Azure VM over SSH (`.github/workflows/deploy.yml`). The VM needs Docker, with the SSH user in the `docker` group.
+Every push to `main` builds an image, pushes it to GHCR and restarts the container on an Azure VM over SSH (`.github/workflows/deploy.yml`). The job fails if the container isn't still running 20 seconds later. The VM needs Docker, with the SSH user in the `docker` group.
 
 Secrets in the GitHub `prod` environment:
 
