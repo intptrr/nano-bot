@@ -1,16 +1,18 @@
 """Adult tennis registration at Amy Yee Tennis Center and Tennis Center Sand Point.
 
-Both are read from public pages rather than an API, so the markup may change
-without notice; a page that loads without the expected schedule raises
-UnrecognizedPageError. Seattle Parks lists Amy Yee's registration dates, and
-ActiveNet has opened online registration at noon on each of them. Sand Point
-posts one table per session with dates and times by membership type but no
-year, so each date is placed in the year nearest to today.
+Seattle Parks lists Amy Yee's registration dates on its tennis page, and
+ActiveNet has opened online registration at noon on each of them. Sand Point's
+Adults page is read from its site's WordPress REST API, which returns just the
+page content as JSON: one table per session with dates and times by membership
+type but no year, so each date is placed in the year nearest to today. Neither
+schedule has a documented format, so the markup may change without notice; a
+page that loads without the expected schedule raises UnrecognizedPageError.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from collections.abc import Callable
@@ -83,6 +85,8 @@ class Opening:
 class Center:
     name: str
     page_url: str
+    source_url: str
+    load: Callable[[str], BeautifulSoup]
     parse: Callable[[BeautifulSoup, date], list[tuple[str, datetime]]]
 
 
@@ -93,7 +97,7 @@ class CenterStatus:
     problem: str | None = None
 
 
-async def _fetch_page(url: str, description: str) -> BeautifulSoup:
+async def _fetch_text(url: str, description: str) -> str:
     async with aiohttp.ClientSession(
         timeout=_HTTP_TIMEOUT, headers=_HEADERS
     ) as session:
@@ -105,13 +109,26 @@ async def _fetch_page(url: str, description: str) -> BeautifulSoup:
                 resp.raise_for_status()
                 return await resp.text()
 
-        page = await retry_async(
+        return await retry_async(
             _request,
             logger=logger,
             description=description,
             retry_exceptions=_RETRY_EXCEPTIONS,
         )
+
+
+def _load_html(page: str) -> BeautifulSoup:
     return BeautifulSoup(page, "html.parser")
+
+
+def _load_wordpress_page(body: str) -> BeautifulSoup:
+    try:
+        content = json.loads(body)[0]["content"]["rendered"]
+    except (ValueError, LookupError, TypeError) as exc:
+        raise UnrecognizedPageError(
+            "No page content in the WordPress response"
+        ) from exc
+    return BeautifulSoup(content, "html.parser")
 
 
 def _parse_datetime(text: str, layout: str) -> datetime:
@@ -214,12 +231,19 @@ def _parse_sand_point(soup: BeautifulSoup, today: date) -> list[tuple[str, datet
 AMY_YEE = Center(
     name="Amy Yee Tennis Center",
     page_url="https://www.seattle.gov/parks/sports/tennis#adult",
+    source_url="https://www.seattle.gov/parks/sports/tennis",
+    load=_load_html,
     parse=_parse_amy_yee,
 )
 
 SAND_POINT = Center(
     name="Tennis Center Sand Point",
     page_url="https://tenniscentersandpoint.com/classes-programs/adults/",
+    source_url=(
+        "https://tenniscentersandpoint.com/wp-json/wp/v2/pages"
+        "?slug=adults&_fields=content"
+    ),
+    load=_load_wordpress_page,
     parse=_parse_sand_point,
 )
 
@@ -228,7 +252,7 @@ CENTERS = (AMY_YEE, SAND_POINT)
 
 async def center_status(center: Center, today: date) -> CenterStatus:
     try:
-        page = await _fetch_page(center.page_url, f"{center.name} page")
+        page = center.load(await _fetch_text(center.source_url, f"{center.name} page"))
         found = center.parse(page, today)
     except UnrecognizedPageError:
         logger.exception("%s page not recognized", center.name)

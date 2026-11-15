@@ -69,9 +69,10 @@ does not run lint, typecheck, or tests.
   `services/tennis.py` (adult tennis registration: Amy Yee Tennis Center's
   dates from the Seattle Parks tennis page, opening at noon Pacific as
   ActiveNet has shown; Tennis Center Sand Point's session table on its Adults
-  page, `Standard Annual` row and both adult columns, dates without a year
-  placed in the year nearest today; unknown layouts raise
-  `UnrecognizedPageError`),
+  page, read from the site's WordPress REST API
+  (`/wp-json/wp/v2/pages?slug=adults`), `Standard Annual` row and both adult
+  columns, dates without a year placed in the year nearest today; unknown
+  layouts raise `UnrecognizedPageError`),
   `services/wonderland.py` (Beyond Wonderland at The Gorge passes on the Front
   Gate storefront: each listing's name and link plus its on-sale date and time,
   which are Pacific data attributes; the "no items on sale" notice means
